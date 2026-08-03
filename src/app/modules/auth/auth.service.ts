@@ -24,7 +24,47 @@ const registerUser = async (payload: IRegisterUser) => {
   });
 
   if (isUserExist) {
-    throw new AppError("User with this email already exists", 400);
+    if (isUserExist.isVerified) {
+      throw new AppError("User with this email already exists", 400);
+    }
+
+    // If user exists but is NOT verified yet, let them re-register.
+    // Update their details, generate a new OTP code, and send the email.
+    const hashedPassword = await bcrypt.hash(
+      payload.password,
+      Number(config.password_salt)
+    );
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+
+    const updatedUser = await prisma.user.update({
+      where: {
+        email: payload.email,
+      },
+      data: {
+        ...payload,
+        password: hashedPassword,
+        otpCode,
+        otpExpires,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        mobile: true,
+        role: true,
+        status: true,
+        isVerified: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const emailHtml = getVerificationOtpTemplate(updatedUser.name, otpCode);
+    await enqueueEmail(updatedUser.email, "Verify Your TutorKhujo Account", emailHtml);
+
+    return updatedUser;
   }
 
   const hashedPassword = await bcrypt.hash(

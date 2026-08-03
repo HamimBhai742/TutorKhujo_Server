@@ -32,6 +32,7 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^9.0.3",
     "redis": "^6.2.0",
+    "server-fancy-ui": "^1.0.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {

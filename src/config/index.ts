@@ -10,4 +10,9 @@ export default {
     secret: process.env.JWT_SECRET || "secret",
     expire_in: process.env.JWT_EXPIRES_IN || "1d",
   },
+  admin: {
+    email: process.env.ADMIN_EMAIL || "admintutorkhujo@gmail.com",
+    password: process.env.ADMIN_PASSWORD || "Hamim@742",
+  },
 };
+

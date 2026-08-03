@@ -9,7 +9,7 @@ const updateProfileValidationSchema = z.object({
 const updateUserStatusValidationSchema = z.object({
   body: z.object({
     status: z.enum(["active", "inactive", "blocked"]).optional(),
-    role: z.enum(["user", "admin"]).optional(),
+    role: z.enum(["student", "tutor", "admin"]).optional(),
   }),
 });
 

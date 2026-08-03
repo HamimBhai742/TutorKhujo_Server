@@ -49,16 +49,16 @@ export const globalErrorHandler = (
       const target: string = Array.isArray(err.meta?.target)
         ? err.meta.target.join(", ")
         : (err.meta?.target as string) ?? "field";
-      message = "Er is een conflict opgetreden. Probeer het opnieuw.";
+      message = `A conflict occurred. Duplicate value for field: ${target}`;
       errorDetails.push({
         path: target,
         message: `Duplicate value for unique field: ${target}`,
       });
     } else if (err.code === "P2025") {
       statusCode = 404;
-      message = "Het gevraagde item kon niet worden gevonden.";
+      message = "The requested item could not be found.";
     } else {
-      message = "Database fout. Probeer het opnieuw.";
+      message = "Database error. Please try again.";
     }
   }
 

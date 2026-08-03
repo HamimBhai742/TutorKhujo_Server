@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import bcrypt from "bcrypt";
 import jwt, { JwtPayload, Secret, SignOptions } from "jsonwebtoken";
 import config from "../../../config";
@@ -7,7 +8,13 @@ import {
   IChangePassword,
   ILoginUser,
   IRegisterUser,
+  IForgotPassword,
+  IVerifyResetOtp,
+  IResetPassword,
 } from "./auth.interface";
+import { enqueueEmail } from "../../queues/email.queue";
+import { getVerificationOtpTemplate } from "../../utils/templates/verificationOtp.template";
+import { getResetPasswordOtpTemplate } from "../../utils/templates/resetPasswordOtp.template";
 
 const registerUser = async (payload: IRegisterUser) => {
   const isUserExist = await prisma.user.findUnique({
@@ -25,15 +32,22 @@ const registerUser = async (payload: IRegisterUser) => {
     Number(config.password_salt)
   );
 
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+
   const newUser = await prisma.user.create({
     data: {
       ...payload,
       password: hashedPassword,
+      isVerified: false,
+      otpCode,
+      otpExpires,
     },
     select: {
       id: true,
       name: true,
       email: true,
+      mobile: true,
       role: true,
       status: true,
       isVerified: true,
@@ -41,6 +55,10 @@ const registerUser = async (payload: IRegisterUser) => {
       updatedAt: true,
     },
   });
+
+  // Enqueue verification email job via BullMQ
+  const emailHtml = getVerificationOtpTemplate(newUser.name, otpCode);
+  await enqueueEmail(newUser.email, "Verify Your TutorKhujo Account", emailHtml);
 
   return newUser;
 };
@@ -58,6 +76,11 @@ const loginUser = async (payload: ILoginUser) => {
 
   if (user.status === "blocked" || user.status === "inactive") {
     throw new AppError(`User account is ${user.status}`, 403);
+  }
+
+  // Enforce account verification
+  if (!user.isVerified) {
+    throw new AppError("Please verify your account using the OTP code sent to your email.", 403);
   }
 
   const isPasswordMatched = await bcrypt.compare(
@@ -79,12 +102,99 @@ const loginUser = async (payload: ILoginUser) => {
     expiresIn: config.jwt.expire_in as SignOptions["expiresIn"],
   });
 
-  const { password, ...result } = user;
+  const { password, otpCode, otpExpires, ...result } = user;
 
   return {
     accessToken,
     user: result,
   };
+};
+
+const verifyOtp = async (email: string, otpCode: string) => {
+  const user = await prisma.user.findUnique({
+    where: {
+      email,
+    },
+  });
+
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  if (user.isVerified) {
+    throw new AppError("User is already verified", 400);
+  }
+
+  if (!user.otpCode || user.otpCode !== otpCode) {
+    throw new AppError("Invalid verification code", 400);
+  }
+
+  if (!user.otpExpires || new Date() > user.otpExpires) {
+    throw new AppError("Verification code has expired. Please request a new one.", 400);
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      isVerified: true,
+      otpCode: null,
+      otpExpires: null,
+    },
+  });
+
+  const jwtPayload = {
+    id: updatedUser.id,
+    email: updatedUser.email,
+    role: updatedUser.role,
+  };
+
+  const accessToken = jwt.sign(jwtPayload, config.jwt.secret as Secret, {
+    expiresIn: config.jwt.expire_in as SignOptions["expiresIn"],
+  });
+
+  const { password, otpCode: oc, otpExpires: oe, ...result } = updatedUser;
+
+  return {
+    accessToken,
+    user: result,
+  };
+};
+
+const resendOtp = async (email: string) => {
+  const user = await prisma.user.findUnique({
+    where: {
+      email,
+    },
+  });
+
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  if (user.isVerified) {
+    throw new AppError("User is already verified", 400);
+  }
+
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+
+  await prisma.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      otpCode,
+      otpExpires,
+    },
+  });
+
+  // Enqueue verification email job via BullMQ
+  const emailHtml = getVerificationOtpTemplate(user.name, otpCode);
+  await enqueueEmail(user.email, "Verify Your TutorKhujo Account", emailHtml);
+
+  return { message: "Verification OTP sent successfully" };
 };
 
 const changePassword = async (
@@ -165,9 +275,125 @@ const refreshToken = async (token: string) => {
   return { accessToken };
 };
 
+
+
+const forgotPassword = async (payload: IForgotPassword) => {
+  const user = await prisma.user.findUnique({
+    where: {
+      email: payload.email,
+    },
+  });
+
+  if (!user) {
+    throw new AppError("User with this email does not exist", 404);
+  }
+
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+
+  await prisma.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      resetPasswordOtp: otpCode,
+      resetPasswordOtpExpires: otpExpires,
+      resetPasswordToken: null,
+      resetPasswordTokenExpires: null,
+    },
+  });
+
+  // Enqueue password reset email job via BullMQ
+  const emailHtml = getResetPasswordOtpTemplate(user.name, otpCode);
+  await enqueueEmail(user.email, "Reset Your TutorKhujo Password", emailHtml);
+
+  return { message: "Password reset OTP sent successfully" };
+};
+
+const verifyResetOtp = async (email: string, otpCode: string) => {
+  const user = await prisma.user.findUnique({
+    where: {
+      email,
+    },
+  });
+
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  if (!user.resetPasswordOtp || user.resetPasswordOtp !== otpCode) {
+    throw new AppError("Invalid verification code", 400);
+  }
+
+  if (!user.resetPasswordOtpExpires || new Date() > user.resetPasswordOtpExpires) {
+    throw new AppError("Verification code has expired. Please request a new one.", 400);
+  }
+
+  // Generate a unique single-use reset password token
+  const resetToken = crypto.randomBytes(32).toString("hex");
+  const tokenExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes validity
+
+  await prisma.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      resetPasswordOtp: null, // consume the OTP immediately
+      resetPasswordOtpExpires: null,
+      resetPasswordToken: resetToken,
+      resetPasswordTokenExpires: tokenExpires,
+    },
+  });
+
+  return { resetToken };
+};
+
+const resetPassword = async (payload: IResetPassword) => {
+  const user = await prisma.user.findUnique({
+    where: {
+      email: payload.email,
+    },
+  });
+
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  if (!user.resetPasswordToken || user.resetPasswordToken !== payload.resetToken) {
+    throw new AppError("Invalid or already used reset token. Please request a new OTP.", 400);
+  }
+
+  if (!user.resetPasswordTokenExpires || new Date() > user.resetPasswordTokenExpires) {
+    throw new AppError("Reset token has expired. Please request a new OTP.", 400);
+  }
+
+  const hashedPassword = await bcrypt.hash(
+    payload.newPassword,
+    Number(config.password_salt)
+  );
+
+  await prisma.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      password: hashedPassword,
+      resetPasswordToken: null, // consume token
+      resetPasswordTokenExpires: null,
+    },
+  });
+
+  return { message: "Password reset successfully. Please log in with your new password." };
+};
+
 export const AuthService = {
   registerUser,
   loginUser,
+  verifyOtp,
+  resendOtp,
+  forgotPassword,
+  verifyResetOtp,
+  resetPassword,
   changePassword,
   refreshToken,
 };

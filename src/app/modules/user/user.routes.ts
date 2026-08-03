@@ -6,11 +6,11 @@ import { UserValidation } from "./user.validation";
 
 const router = Router();
 
-router.get("/me", auth("user", "admin"), UserController.getMe);
+router.get("/me", auth("student", "tutor", "admin"), UserController.getMe);
 
 router.patch(
   "/me",
-  auth("user", "admin"),
+  auth("student", "tutor", "admin"),
   validateRequest(UserValidation.updateProfileValidationSchema),
   UserController.updateMe
 );

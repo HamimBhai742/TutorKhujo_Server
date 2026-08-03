@@ -8,15 +8,22 @@ datasource db {
 }
 
 model User {
-  id         String   @id @default(uuid())
-  name       String
-  email      String   @unique
-  password   String
-  role       Role     @default(user)
-  status     Status   @default(active)
-  isVerified Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                         String    @id @default(uuid())
+  name                       String
+  email                      String    @unique
+  password                   String
+  mobile                     String
+  role                       Role      @default(student)
+  status                     Status    @default(active)
+  isVerified                 Boolean   @default(false)
+  otpCode                    String?
+  otpExpires                 DateTime?
+  resetPasswordOtp           String?
+  resetPasswordOtpExpires    DateTime?
+  resetPasswordToken         String?
+  resetPasswordTokenExpires  DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 }
 
 enum Status {
@@ -26,6 +33,7 @@ enum Status {
 }
 
 enum Role {
-  user
+  student
+  tutor
   admin
 }

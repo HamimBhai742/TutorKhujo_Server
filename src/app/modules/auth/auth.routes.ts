@@ -20,15 +20,45 @@ router.post(
 
 router.post(
   "/change-password",
-  auth("user", "admin"),
+  auth("student", "tutor", "admin"),
   validateRequest(AuthValidation.changePasswordValidationSchema),
   AuthController.changePassword
+);
+
+router.post(
+  "/verify-otp",
+  validateRequest(AuthValidation.verifyOtpValidationSchema),
+  AuthController.verifyOtp
+);
+
+router.post(
+  "/resend-otp",
+  validateRequest(AuthValidation.resendOtpValidationSchema),
+  AuthController.resendOtp
 );
 
 router.post(
   "/refresh-token",
   validateRequest(AuthValidation.refreshTokenValidationSchema),
   AuthController.refreshToken
+);
+
+router.post(
+  "/forgot-password",
+  validateRequest(AuthValidation.forgotPasswordValidationSchema),
+  AuthController.forgotPassword
+);
+
+router.post(
+  "/verify-reset-otp",
+  validateRequest(AuthValidation.verifyResetOtpValidationSchema),
+  AuthController.verifyResetOtp
+);
+
+router.post(
+  "/reset-password",
+  validateRequest(AuthValidation.resetPasswordValidationSchema),
+  AuthController.resetPassword
 );
 
 export const authRoutes = router;

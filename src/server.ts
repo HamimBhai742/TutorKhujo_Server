@@ -2,6 +2,7 @@ import { Server } from "http";
 import app from "./app";
 import config from "./config";
 import { connectedDB } from "./app/db/connected.db";
+import "./app/workers/email.worker";
 
 let server: Server;
 const port = config.port;

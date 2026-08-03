@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import jwt, { JwtPayload, Secret, SignOptions } from "jsonwebtoken";
+import { OAuth2Client } from "google-auth-library";
 import config from "../../../config";
 import { AppError } from "../../error/AppError";
 import { prisma } from "../../lib/prisma";
@@ -121,6 +122,10 @@ const loginUser = async (payload: ILoginUser) => {
   // Enforce account verification
   if (!user.isVerified) {
     throw new AppError("Please verify your account using the OTP code sent to your email.", 403);
+  }
+
+  if (!user.password) {
+    throw new AppError("This account was registered using Google. Please log in with Google.", 400);
   }
 
   const isPasswordMatched = await bcrypt.compare(
@@ -249,6 +254,10 @@ const changePassword = async (
 
   if (!user) {
     throw new AppError("User does not exist", 404);
+  }
+
+  if (!user.password) {
+    throw new AppError("This account does not have a local password set because it was registered via Google.", 400);
   }
 
   const isPasswordMatched = await bcrypt.compare(
@@ -426,9 +435,79 @@ const resetPassword = async (payload: IResetPassword) => {
   return { message: "Password reset successfully. Please log in with your new password." };
 };
 
+const googleLogin = async (payload: { idToken: string; role?: "student" | "tutor" }) => {
+  if (!config.google_client_id) {
+    throw new AppError("Google Client ID is not configured on the server", 500);
+  }
+
+  const client = new OAuth2Client(config.google_client_id);
+  let ticket;
+  try {
+    ticket = await client.verifyIdToken({
+      idToken: payload.idToken,
+      audience: config.google_client_id,
+    });
+  } catch (error: any) {
+    throw new AppError("Invalid Google ID token", 401);
+  }
+
+  const googlePayload = ticket.getPayload();
+  if (!googlePayload || !googlePayload.email || !googlePayload.name) {
+    throw new AppError("Failed to retrieve user information from Google", 400);
+  }
+
+  const { email, name } = googlePayload;
+
+  let user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (user) {
+    if (user.status === "blocked" || user.status === "inactive") {
+      throw new AppError(`User account is ${user.status}`, 403);
+    }
+
+    if (!user.isVerified) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { isVerified: true },
+      });
+    }
+  } else {
+    user = await prisma.user.create({
+      data: {
+        email,
+        name,
+        isVerified: true,
+        role: payload.role || "student",
+        password: null,
+        mobile: null,
+      },
+    });
+  }
+
+  const jwtPayload = {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+  };
+
+  const accessToken = jwt.sign(jwtPayload, config.jwt.secret as Secret, {
+    expiresIn: config.jwt.expire_in as SignOptions["expiresIn"],
+  });
+
+  const { password, otpCode, otpExpires, ...result } = user;
+
+  return {
+    accessToken,
+    user: result,
+  };
+};
+
 export const AuthService = {
   registerUser,
   loginUser,
+  googleLogin,
   verifyOtp,
   resendOtp,
   forgotPassword,

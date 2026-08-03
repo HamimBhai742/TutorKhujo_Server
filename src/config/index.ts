@@ -14,5 +14,6 @@ export default {
     email: process.env.ADMIN_EMAIL || "admintutorkhujo@gmail.com",
     password: process.env.ADMIN_PASSWORD || "Hamim@742",
   },
+  google_client_id: process.env.GOOGLE_CLIENT_ID || "",
 };
 

@@ -91,6 +91,13 @@ const resetPasswordValidationSchema = z.object({
   }),
 });
 
+const googleLoginValidationSchema = z.object({
+  body: z.object({
+    idToken: z.string({ required_error: "Google ID token is required" }),
+    role: z.enum(["student", "tutor"]).optional(),
+  }),
+});
+
 export const AuthValidation = {
   registerValidationSchema,
   loginValidationSchema,
@@ -101,4 +108,5 @@ export const AuthValidation = {
   forgotPasswordValidationSchema,
   verifyResetOtpValidationSchema,
   resetPasswordValidationSchema,
+  googleLoginValidationSchema,
 };

@@ -19,6 +19,12 @@ router.post(
 );
 
 router.post(
+  "/google-login",
+  validateRequest(AuthValidation.googleLoginValidationSchema),
+  AuthController.googleLogin
+);
+
+router.post(
   "/change-password",
   auth("student", "tutor", "admin"),
   validateRequest(AuthValidation.changePasswordValidationSchema),

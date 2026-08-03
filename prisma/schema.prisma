@@ -11,8 +11,8 @@ model User {
   id                         String    @id @default(uuid())
   name                       String
   email                      String    @unique
-  password                   String
-  mobile                     String
+  password                   String?
+  mobile                     String?
   role                       Role      @default(student)
   status                     Status    @default(active)
   isVerified                 Boolean   @default(false)

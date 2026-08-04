@@ -48,6 +48,7 @@ const registerUser = async (payload: IRegisterUser) => {
         password: hashedPassword,
         otpCode,
         otpExpires,
+        isFirstLogin: false,
       },
       select: {
         id: true,
@@ -57,6 +58,7 @@ const registerUser = async (payload: IRegisterUser) => {
         role: true,
         status: true,
         isVerified: true,
+        isFirstLogin: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -83,6 +85,7 @@ const registerUser = async (payload: IRegisterUser) => {
       isVerified: false,
       otpCode,
       otpExpires,
+      isFirstLogin: false,
     },
     select: {
       id: true,
@@ -92,6 +95,7 @@ const registerUser = async (payload: IRegisterUser) => {
       role: true,
       status: true,
       isVerified: true,
+      isFirstLogin: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -482,6 +486,7 @@ const googleLogin = async (payload: { idToken: string; role?: "student" | "tutor
         role: payload.role || "student",
         password: null,
         mobile: null,
+        isFirstLogin: payload.role ? false : true,
       },
     });
   }

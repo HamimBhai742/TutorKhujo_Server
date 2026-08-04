@@ -16,6 +16,7 @@ model User {
   role                       Role      @default(student)
   status                     Status    @default(active)
   isVerified                 Boolean   @default(false)
+  isFirstLogin               Boolean   @default(true)
   otpCode                    String?
   otpExpires                 DateTime?
   resetPasswordOtp           String?

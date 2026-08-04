@@ -3,6 +3,8 @@ import { z } from "zod";
 const updateProfileValidationSchema = z.object({
   body: z.object({
     name: z.string().optional(),
+    role: z.enum(["student", "tutor"]).optional(),
+    isFirstLogin: z.boolean().optional(),
   }),
 });
 

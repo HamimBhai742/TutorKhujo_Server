@@ -5,4 +5,5 @@ export interface IUpdateProfile {
 export interface IUpdateUserStatus {
   status?: "active" | "inactive" | "blocked";
   role?: "student" | "tutor" | "admin";
+  isVerified?: boolean;
 }

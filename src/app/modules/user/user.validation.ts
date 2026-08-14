@@ -12,6 +12,7 @@ const updateUserStatusValidationSchema = z.object({
   body: z.object({
     status: z.enum(["active", "inactive", "blocked"]).optional(),
     role: z.enum(["student", "tutor", "admin"]).optional(),
+    isVerified: z.boolean().optional(),
   }),
 });
 

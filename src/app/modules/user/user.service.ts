@@ -61,6 +61,7 @@ const getAllUsers = async () => {
       email: true,
       role: true,
       status: true,
+      mobile: true,
       isVerified: true,
       isFirstLogin: true,
       createdAt: true,
@@ -80,6 +81,7 @@ const getUserById = async (userId: string) => {
       email: true,
       role: true,
       status: true,
+      mobile: true,
       isVerified: true,
       isFirstLogin: true,
       createdAt: true,
@@ -115,6 +117,7 @@ const updateUserStatus = async (
       email: true,
       role: true,
       status: true,
+      mobile: true,
       isVerified: true,
       isFirstLogin: true,
       createdAt: true,
@@ -125,10 +128,36 @@ const updateUserStatus = async (
   return updatedUser;
 };
 
+const deleteUser = async (userId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  const deletedUser = await prisma.user.delete({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      status: true,
+      isVerified: true,
+      createdAt: true,
+    },
+  });
+
+  return deletedUser;
+};
+
 export const UserService = {
   getMe,
   updateMe,
   getAllUsers,
   getUserById,
   updateUserStatus,
+  deleteUser,
 };

@@ -23,8 +23,30 @@ model User {
   resetPasswordOtpExpires    DateTime?
   resetPasswordToken         String?
   resetPasswordTokenExpires  DateTime?
+  tuitionPosts               TuitionPost[]
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
+}
+
+model TuitionPost {
+  id               String       @id @default(uuid())
+  studentId        String
+  student          User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  title            String?
+  classLevel       String
+  subjects         String[]
+  budget           Int
+  mode             TuitionMode  @default(Home)
+  frequency        String       @default("3 Days / Week")
+  location         String
+  status           PostStatus   @default(Active)
+  genderPreference String?      @default("Any")
+  extraNotes       String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([studentId])
+  @@index([status])
 }
 
 enum Status {
@@ -37,4 +59,16 @@ enum Role {
   student
   tutor
   admin
+}
+
+enum TuitionMode {
+  Home
+  Online
+  Both
+}
+
+enum PostStatus {
+  Active
+  Paused
+  Closed
 }

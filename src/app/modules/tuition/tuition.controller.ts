@@ -117,6 +117,62 @@ const getStudentDashboardStats = catchAsync(async (req: Request, res: Response) 
   });
 });
 
+const applyForTuition = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const { id } = req.params;
+  const result = await TuitionService.applyForTuition(id, user.id, req.body);
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: "Application submitted successfully",
+    data: result,
+  });
+});
+
+const getMyReceivedApplications = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const result = await TuitionService.getMyReceivedApplications(user.id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Received applications retrieved successfully",
+    data: result,
+  });
+});
+
+const getTutorAppliedPosts = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const result = await TuitionService.getTutorAppliedPosts(user.id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Tutor applied posts retrieved successfully",
+    data: result,
+  });
+});
+
+const updateApplicationStatus = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const { applicationId } = req.params;
+  const { status } = req.body;
+  const result = await TuitionService.updateApplicationStatus(
+    applicationId,
+    user.id,
+    user.role,
+    status
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: `Application marked as ${status}`,
+    data: result,
+  });
+});
+
 export const TuitionController = {
   createTuitionPost,
   getMyTuitionPosts,
@@ -126,4 +182,8 @@ export const TuitionController = {
   updatePostStatus,
   deleteTuitionPost,
   getStudentDashboardStats,
+  applyForTuition,
+  getMyReceivedApplications,
+  getTutorAppliedPosts,
+  updateApplicationStatus,
 };

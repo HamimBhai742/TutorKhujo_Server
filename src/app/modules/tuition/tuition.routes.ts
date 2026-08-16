@@ -20,11 +20,30 @@ router.get(
   TuitionController.getStudentDashboardStats
 );
 
+// Protected: Get student's received applications
+router.get(
+  "/my-applications",
+  auth("student", "admin"),
+  TuitionController.getMyReceivedApplications
+);
+
+// Protected: Get tutor's applied posts
+router.get(
+  "/tutor/my-applied",
+  auth("tutor", "admin"),
+  TuitionController.getTutorAppliedPosts
+);
+
+// Protected: Update application status (Shortlisted / Hired / Rejected)
+router.patch(
+  "/applications/:applicationId/status",
+  auth("student", "admin"),
+  validateRequest(TuitionValidation.updateApplicationStatusValidationSchema),
+  TuitionController.updateApplicationStatus
+);
+
 // Public: Browse all tuition posts (with filters & search)
 router.get("/", TuitionController.getAllTuitionPosts);
-
-// Public: Get specific tuition post details
-router.get("/:id", TuitionController.getTuitionPostById);
 
 // Protected: Create a tuition post
 router.post(
@@ -33,6 +52,17 @@ router.post(
   validateRequest(TuitionValidation.createTuitionPostValidationSchema),
   TuitionController.createTuitionPost
 );
+
+// Protected: Apply for a tuition post (Tutor)
+router.post(
+  "/:id/apply",
+  auth("tutor", "admin"),
+  validateRequest(TuitionValidation.applyTuitionValidationSchema),
+  TuitionController.applyForTuition
+);
+
+// Public: Get specific tuition post details
+router.get("/:id", TuitionController.getTuitionPostById);
 
 // Protected: Update a tuition post
 router.patch(

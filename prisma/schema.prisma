@@ -24,6 +24,7 @@ model User {
   resetPasswordToken         String?
   resetPasswordTokenExpires  DateTime?
   tuitionPosts               TuitionPost[]
+  applications               TuitionApplication[] @relation("TutorApplications")
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 }
@@ -42,11 +43,29 @@ model TuitionPost {
   status           PostStatus   @default(Active)
   genderPreference String?      @default("Any")
   extraNotes       String?
+  applications     TuitionApplication[]
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
   @@index([studentId])
   @@index([status])
+}
+
+model TuitionApplication {
+  id             String            @id @default(uuid())
+  tuitionPostId  String
+  tuitionPost    TuitionPost       @relation(fields: [tuitionPostId], references: [id], onDelete: Cascade)
+  tutorId        String
+  tutor          User              @relation("TutorApplications", fields: [tutorId], references: [id], onDelete: Cascade)
+  salaryBid      Int
+  proposal       String?
+  status         ApplicationStatus @default(Pending)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([tuitionPostId, tutorId])
+  @@index([tuitionPostId])
+  @@index([tutorId])
 }
 
 enum Status {
@@ -71,4 +90,11 @@ enum PostStatus {
   Active
   Paused
   Closed
+}
+
+enum ApplicationStatus {
+  Pending
+  Shortlisted
+  Hired
+  Rejected
 }

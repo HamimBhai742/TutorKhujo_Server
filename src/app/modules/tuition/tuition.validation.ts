@@ -43,8 +43,27 @@ const updatePostStatusValidationSchema = z.object({
   }),
 });
 
+const applyTuitionValidationSchema = z.object({
+  body: z.object({
+    salaryBid: z.number({
+      required_error: "Salary bid is required",
+    }).positive("Salary bid must be greater than 0"),
+    proposal: z.string().optional(),
+  }),
+});
+
+const updateApplicationStatusValidationSchema = z.object({
+  body: z.object({
+    status: z.enum(["Pending", "Shortlisted", "Hired", "Rejected"], {
+      required_error: "Application status is required",
+    }),
+  }),
+});
+
 export const TuitionValidation = {
   createTuitionPostValidationSchema,
   updateTuitionPostValidationSchema,
   updatePostStatusValidationSchema,
+  applyTuitionValidationSchema,
+  updateApplicationStatusValidationSchema,
 };

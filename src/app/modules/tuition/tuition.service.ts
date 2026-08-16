@@ -2,9 +2,11 @@ import { Prisma } from "@prisma/client";
 import { AppError } from "../../error/AppError";
 import { prisma } from "../../lib/prisma";
 import {
+  ICreateApplication,
   ICreateTuitionPost,
   ITuitionQueryFilters,
   IUpdateTuitionPost,
+  TApplicationStatus,
   TPostStatus,
 } from "./tuition.interface";
 
@@ -288,17 +290,179 @@ const deleteTuitionPost = async (
 };
 
 const getStudentDashboardStats = async (studentId: string) => {
-  const [totalPosts, activePosts, pausedPosts] = await Promise.all([
+  const [totalPosts, activePosts, pausedPosts, totalApplications] = await Promise.all([
     prisma.tuitionPost.count({ where: { studentId } }),
     prisma.tuitionPost.count({ where: { studentId, status: "Active" } }),
     prisma.tuitionPost.count({ where: { studentId, status: "Paused" } }),
+    prisma.tuitionApplication.count({ where: { tuitionPost: { studentId } } }),
   ]);
 
   return {
     totalPosts,
     activePosts,
     pausedPosts,
+    totalApplications,
   };
+};
+
+const applyForTuition = async (
+  tuitionPostId: string,
+  tutorId: string,
+  payload: ICreateApplication
+) => {
+  const post = await prisma.tuitionPost.findUnique({
+    where: { id: tuitionPostId },
+  });
+
+  if (!post) {
+    throw new AppError("Tuition post not found", 404);
+  }
+
+  if (post.status !== "Active") {
+    throw new AppError("This tuition post is currently not accepting applications", 400);
+  }
+
+  if (post.studentId === tutorId) {
+    throw new AppError("You cannot apply to your own tuition post", 400);
+  }
+
+  const existingApplication = await prisma.tuitionApplication.findUnique({
+    where: {
+      tuitionPostId_tutorId: {
+        tuitionPostId,
+        tutorId,
+      },
+    },
+  });
+
+  if (existingApplication) {
+    throw new AppError("You have already applied for this tuition post", 400);
+  }
+
+  const result = await prisma.tuitionApplication.create({
+    data: {
+      tuitionPostId,
+      tutorId,
+      salaryBid: payload.salaryBid,
+      proposal: payload.proposal || null,
+      status: "Pending",
+    },
+    include: {
+      tuitionPost: true,
+      tutor: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+        },
+      },
+    },
+  });
+
+  return result;
+};
+
+const getMyReceivedApplications = async (studentId: string) => {
+  const result = await prisma.tuitionApplication.findMany({
+    where: {
+      tuitionPost: {
+        studentId,
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    include: {
+      tutor: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+        },
+      },
+      tuitionPost: {
+        select: {
+          id: true,
+          title: true,
+          classLevel: true,
+          subjects: true,
+          budget: true,
+          location: true,
+          mode: true,
+          status: true,
+        },
+      },
+    },
+  });
+
+  return result;
+};
+
+const getTutorAppliedPosts = async (tutorId: string) => {
+  const applications = await prisma.tuitionApplication.findMany({
+    where: {
+      tutorId,
+    },
+    select: {
+      id: true,
+      tuitionPostId: true,
+      salaryBid: true,
+      status: true,
+      createdAt: true,
+    },
+  });
+
+  return applications;
+};
+
+const updateApplicationStatus = async (
+  applicationId: string,
+  userId: string,
+  userRole: string,
+  status: TApplicationStatus
+) => {
+  const application = await prisma.tuitionApplication.findUnique({
+    where: { id: applicationId },
+    include: {
+      tuitionPost: true,
+    },
+  });
+
+  if (!application) {
+    throw new AppError("Application not found", 404);
+  }
+
+  if (application.tuitionPost.studentId !== userId && userRole !== "admin") {
+    throw new AppError("You are not authorized to update this application", 403);
+  }
+
+  const result = await prisma.tuitionApplication.update({
+    where: { id: applicationId },
+    data: { status },
+    include: {
+      tutor: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+        },
+      },
+      tuitionPost: true,
+    },
+  });
+
+  // If status is "Hired", automatically pause the tuition post
+  if (status === "Hired") {
+    await prisma.tuitionPost.update({
+      where: { id: application.tuitionPostId },
+      data: { status: "Paused" },
+    });
+  }
+
+  return result;
 };
 
 export const TuitionService = {
@@ -310,4 +474,8 @@ export const TuitionService = {
   updatePostStatus,
   deleteTuitionPost,
   getStudentDashboardStats,
+  applyForTuition,
+  getMyReceivedApplications,
+  getTutorAppliedPosts,
+  updateApplicationStatus,
 };

@@ -1,5 +1,6 @@
 export type TTuitionMode = "Home" | "Online" | "Both";
 export type TPostStatus = "Active" | "Paused" | "Closed";
+export type TApplicationStatus = "Pending" | "Shortlisted" | "Hired" | "Rejected";
 
 export interface ICreateTuitionPost {
   title?: string;
@@ -39,4 +40,13 @@ export interface ITuitionQueryFilters {
   limit?: number;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+}
+
+export interface ICreateApplication {
+  salaryBid: number;
+  proposal?: string;
+}
+
+export interface IUpdateApplicationStatus {
+  status: TApplicationStatus;
 }

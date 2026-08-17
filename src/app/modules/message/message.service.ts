@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import { getIO } from "../../lib/socket";
 import { AppError } from "../../error/AppError";
+import { NotificationService } from "../notification/notification.service";
 
 const createConversation = async (
   requesterId: string,
@@ -37,7 +38,10 @@ const createConversation = async (
     });
   }
 
-  return conversation;
+  return {
+    ...conversation,
+    recipientId: requesterRole === "student" ? conversation.tutorId : conversation.studentId,
+  };
 };
 
 const getMyConversations = async (userId: string) => {
@@ -86,7 +90,9 @@ const getMyConversations = async (userId: string) => {
 
       return {
         id: c.id,
+        recipientId: counterParty?.id || "",
         studentName: counterParty?.name || "User",
+        role: counterParty?.role || "",
         avatarBg: counterParty?.profilePic || bgColors[colorIdx],
         lastMessage: lastMsg?.content || "No messages yet",
         time: lastMsg ? new Date(lastMsg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "New",
@@ -101,6 +107,10 @@ const getMyConversations = async (userId: string) => {
 const sendMessage = async (senderId: string, conversationId: string, content: string) => {
   const existingConv = await prisma.conversation.findUnique({
     where: { id: conversationId },
+    include: {
+      student: { select: { id: true, name: true } },
+      tutor: { select: { id: true, name: true } },
+    },
   });
 
   if (!existingConv) {
@@ -120,16 +130,13 @@ const sendMessage = async (senderId: string, conversationId: string, content: st
     },
   });
 
-  const conversation = await prisma.conversation.update({
+  await prisma.conversation.update({
     where: { id: conversationId },
     data: { updatedAt: new Date() },
-    include: {
-      student: true,
-      tutor: true,
-    },
   });
 
-  const recipientId = conversation.studentId === senderId ? conversation.tutorId : conversation.studentId;
+  const recipientId = existingConv.studentId === senderId ? existingConv.tutorId : existingConv.studentId;
+  const senderName = existingConv.studentId === senderId ? existingConv.student.name : existingConv.tutor.name;
 
   try {
     const io = getIO();
@@ -137,7 +144,7 @@ const sendMessage = async (senderId: string, conversationId: string, content: st
       id: message.id,
       conversationId: message.conversationId,
       senderId: message.senderId,
-      sender: conversation.studentId === senderId ? "student" : "tutor",
+      sender: existingConv.studentId === senderId ? "student" : "tutor",
       content: message.content,
       time: new Date(message.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
     };
@@ -146,6 +153,15 @@ const sendMessage = async (senderId: string, conversationId: string, content: st
   } catch (err) {
     console.error("Socket emit failed:", err);
   }
+
+  // Send in-app & push notification to the receiver
+  NotificationService.sendNotification({
+    userId: recipientId,
+    title: `💬 New message from ${senderName}`,
+    message: content.length > 80 ? content.slice(0, 77) + "..." : content,
+    type: "MESSAGE",
+    link: `/dashboard?tab=messages`,
+  }).catch((err) => console.error("[Message] Failed to notify recipient of new message:", err));
 
   return message;
 };
@@ -169,7 +185,7 @@ const getMessages = async (conversationId: string, requestingUserId: string) => 
   }
 
   // Mark all unread messages sent by the counterparty in this conversation as read
-  await prisma.message.updateMany({
+  const updateRes = await prisma.message.updateMany({
     where: {
       conversationId,
       senderId: { not: requestingUserId },
@@ -177,6 +193,19 @@ const getMessages = async (conversationId: string, requestingUserId: string) => 
     },
     data: { isRead: true },
   });
+
+  const recipientId = conversation.studentId === requestingUserId ? conversation.tutorId : conversation.studentId;
+
+  // If any unread message was updated, broadcast read event via socket
+  if (updateRes.count > 0) {
+    try {
+      const io = getIO();
+      io.to(recipientId).emit("messages_read", {
+        conversationId,
+        readerId: requestingUserId,
+      });
+    } catch (_) {}
+  }
 
   const messages = await prisma.message.findMany({
     where: { conversationId },
@@ -187,8 +216,44 @@ const getMessages = async (conversationId: string, requestingUserId: string) => 
     id: m.id,
     sender: m.senderId === conversation.studentId ? "student" : "tutor",
     content: m.content,
+    isRead: m.isRead,
     time: new Date(m.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
   }));
+};
+
+const markConversationAsRead = async (conversationId: string, requestingUserId: string) => {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+  });
+
+  if (!conversation) {
+    throw new AppError("Conversation not found", 404);
+  }
+
+  if (conversation.studentId !== requestingUserId && conversation.tutorId !== requestingUserId) {
+    throw new AppError("You are not authorized to access this conversation", 403);
+  }
+
+  await prisma.message.updateMany({
+    where: {
+      conversationId,
+      senderId: { not: requestingUserId },
+      isRead: false,
+    },
+    data: { isRead: true },
+  });
+
+  const recipientId = conversation.studentId === requestingUserId ? conversation.tutorId : conversation.studentId;
+
+  try {
+    const io = getIO();
+    io.to(recipientId).emit("messages_read", {
+      conversationId,
+      readerId: requestingUserId,
+    });
+  } catch (_) {}
+
+  return { success: true };
 };
 
 export const MessageService = {
@@ -196,4 +261,5 @@ export const MessageService = {
   getMyConversations,
   sendMessage,
   getMessages,
+  markConversationAsRead,
 };

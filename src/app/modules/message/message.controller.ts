@@ -81,9 +81,23 @@ const getMessages = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const markAsRead = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const { conversationId } = req.params;
+  const result = await MessageService.markConversationAsRead(conversationId, user.id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Conversation marked as read",
+    data: result,
+  });
+});
+
 export const MessageController = {
   createConversation,
   getMyConversations,
   sendMessage,
   getMessages,
+  markAsRead,
 };

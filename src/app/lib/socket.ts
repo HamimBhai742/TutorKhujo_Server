@@ -6,7 +6,7 @@ import { isRedisAvailable, redisClient } from "./redis";
 import { createAdapter } from "@socket.io/redis-adapter";
 
 let io: SocketServer | null = null;
-const userSockets = new Map<string, string>(); // userId -> socketId
+const userSockets = new Map<string, Set<string>>(); // userId -> Set of socketIds
 
 // Same allowed origins as app.ts for consistency
 const allowedSocketOrigins = [
@@ -41,11 +41,7 @@ export const initSocket = async (httpServer: HttpServer) => {
     },
   });
 
-  // ============================================================
-  // Redis Adapter — enables multi-instance horizontal scaling.
-  // Socket events are broadcast across all server instances.
-  // Falls back to in-memory (single-instance) when Redis is offline.
-  // ============================================================
+  // Redis Adapter — enables multi-instance horizontal scaling
   if (isRedisAvailable && redisClient) {
     try {
       const pubClient = redisClient.duplicate();
@@ -60,10 +56,7 @@ export const initSocket = async (httpServer: HttpServer) => {
     console.log("Socket.io: Using in-memory adapter (single-instance mode)");
   }
 
-  // ============================================================
-  // JWT Authentication Middleware — runs before ANY connection
-  // The client must pass the JWT in socket.handshake.auth.token
-  // ============================================================
+  // JWT Authentication Middleware
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token as string | undefined;
 
@@ -77,7 +70,6 @@ export const initSocket = async (httpServer: HttpServer) => {
         email: string;
         role: string;
       };
-      // Attach verified user info to the socket for use in connection handler
       (socket as any).user = decoded;
       next();
     } catch {
@@ -86,20 +78,69 @@ export const initSocket = async (httpServer: HttpServer) => {
   });
 
   io.on("connection", (socket) => {
-    // userId is now taken from verified JWT — not from untrusted query params
     const user = (socket as any).user as { id: string; email: string; role: string };
     const userId = user?.id;
 
     if (userId) {
-      userSockets.set(userId, socket.id);
-      socket.join(userId); // Join room named after userId
-      console.log(`[Socket] User connected: ${userId} (${socket.id})`);
+      if (!userSockets.has(userId)) {
+        userSockets.set(userId, new Set());
+      }
+      userSockets.get(userId)!.add(socket.id);
+      socket.join(userId);
+
+      // Broadcast user online status
+      socket.broadcast.emit("user_online", { userId });
+      // Send current online user list to newly connected client
+      socket.emit("online_users", Array.from(userSockets.keys()));
+      console.log(`[Socket] User connected: ${userId} (${socket.id}). Online: ${userSockets.size}`);
     }
 
+    // Typing start indicator
+    socket.on("typing_start", (data: { conversationId: string; recipientId: string }) => {
+      if (data?.recipientId && userId) {
+        io?.to(data.recipientId).emit("typing_status", {
+          conversationId: data.conversationId,
+          senderId: userId,
+          isTyping: true,
+        });
+      }
+    });
+
+    // Typing stop indicator
+    socket.on("typing_stop", (data: { conversationId: string; recipientId: string }) => {
+      if (data?.recipientId && userId) {
+        io?.to(data.recipientId).emit("typing_status", {
+          conversationId: data.conversationId,
+          senderId: userId,
+          isTyping: false,
+        });
+      }
+    });
+
+    // Read receipts
+    socket.on("mark_read", (data: { conversationId: string; recipientId: string }) => {
+      if (data?.recipientId && userId) {
+        io?.to(data.recipientId).emit("messages_read", {
+          conversationId: data.conversationId,
+          readerId: userId,
+        });
+      }
+    });
+
+    // Request active online users
+    socket.on("get_online_users", () => {
+      socket.emit("online_users", Array.from(userSockets.keys()));
+    });
+
     socket.on("disconnect", () => {
-      if (userId) {
-        userSockets.delete(userId);
-        console.log(`[Socket] User disconnected: ${userId}`);
+      if (userId && userSockets.has(userId)) {
+        const socketSet = userSockets.get(userId)!;
+        socketSet.delete(socket.id);
+        if (socketSet.size === 0) {
+          userSockets.delete(userId);
+          io?.emit("user_offline", { userId });
+          console.log(`[Socket] User offline: ${userId}. Online: ${userSockets.size}`);
+        }
       }
     });
   });
@@ -114,6 +155,6 @@ export const getIO = (): SocketServer => {
   return io;
 };
 
-export const getUserSocketId = (userId: string): string | undefined => {
-  return userSockets.get(userId);
+export const isUserOnline = (userId: string): boolean => {
+  return userSockets.has(userId) && (userSockets.get(userId)?.size || 0) > 0;
 };

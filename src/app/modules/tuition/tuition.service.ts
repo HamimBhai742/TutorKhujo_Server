@@ -317,6 +317,25 @@ const applyForTuition = async (
   tutorId: string,
   payload: ICreateApplication
 ) => {
+  const tutor = await prisma.user.findUnique({
+    where: { id: tutorId },
+  });
+
+  if (!tutor || tutor.deletedAt) {
+    throw new AppError("Tutor profile not found", 404);
+  }
+
+  if (tutor.role !== "tutor") {
+    throw new AppError("Only registered tutors can apply for tuition posts", 403);
+  }
+
+  if (tutor.verificationStatus !== "Approved") {
+    throw new AppError(
+      "Your tutor profile is currently pending verification. An admin must approve your profile documents before you can submit tuition applications.",
+      403
+    );
+  }
+
   const post = await prisma.tuitionPost.findUnique({
     where: { id: tuitionPostId },
   });

@@ -99,6 +99,18 @@ const getMyConversations = async (userId: string) => {
 };
 
 const sendMessage = async (senderId: string, conversationId: string, content: string) => {
+  const existingConv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+  });
+
+  if (!existingConv) {
+    throw new AppError("Conversation not found", 404);
+  }
+
+  if (existingConv.studentId !== senderId && existingConv.tutorId !== senderId) {
+    throw new AppError("You are not authorized to send messages in this conversation", 403);
+  }
+
   const message = await prisma.message.create({
     data: {
       conversationId,

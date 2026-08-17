@@ -250,6 +250,7 @@ const getPendingVerifications = async () => {
   const tutors = await prisma.user.findMany({
     where: {
       role: "tutor",
+      deletedAt: null,
       verificationStatus: {
         not: "None",
       },
@@ -300,7 +301,7 @@ const updateVerificationStatus = async (
     where: { id: userId },
     data: {
       verificationStatus: status,
-      isVerified: status === "Approved" ? true : false,
+      isVerified: status === "Approved" ? true : user.isVerified,
     },
   });
 

@@ -1,46 +1,58 @@
 # ==========================================
-# STAGE 1: Build Stage
+# STAGE 1: Dependencies Stage
 # ==========================================
-FROM node:20-alpine AS builder
-
+FROM node:20-alpine AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install build dependencies
 COPY package*.json ./
 RUN npm ci
 
-# Generate Prisma Client
-COPY prisma ./prisma/
-RUN npx prisma generate
-
-# Copy source code and build JS
-COPY tsconfig.json ./
-COPY src ./src/
-RUN npm run build
-
 # ==========================================
-# STAGE 2: Production Stage
+# STAGE 2: Build Stage
 # ==========================================
-FROM node:20-alpine
-
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Install only production dependencies
 COPY package*.json ./
-RUN npm ci --omit=dev
-
-# Copy Prisma schema and generated Prisma client
+COPY --from=deps /app/node_modules ./node_modules
 COPY prisma ./prisma/
+COPY tsconfig.json ./
+COPY src ./src/
+
+# Generate Prisma Client & compile TypeScript
 RUN npx prisma generate
+RUN npm run build
 
-# Copy built application code
-COPY --from=builder /app/dist ./dist/
+# Remove devDependencies for production image efficiency
+RUN npm prune --omit=dev
 
-# Expose server port
+# ==========================================
+# STAGE 3: Production Runner Stage
+# ==========================================
+FROM node:20-alpine AS runner
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=5000
+
+# Create dedicated non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 expressjs
+
+# Copy production dependencies, compiled dist, and prisma schema
+COPY --from=builder /app/package*.json ./
+COPY --from=builder --chown=expressjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=expressjs:nodejs /app/dist ./dist
+COPY --from=builder --chown=expressjs:nodejs /app/prisma ./prisma
+
+USER expressjs
+
 EXPOSE 5000
 
-# Set environment to production
-ENV NODE_ENV=production
+# Container Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:5000/api/v1/health || exit 1
 
-# Start command: Wait for DB to sync, then start Express
-CMD ["sh", "-c", "npx prisma db push && node dist/server.js"]
+CMD ["node", "dist/server.js"]

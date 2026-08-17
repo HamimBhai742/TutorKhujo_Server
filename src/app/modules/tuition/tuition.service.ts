@@ -12,6 +12,131 @@ import {
   TPostStatus,
 } from "./tuition.interface";
 
+const isInstitutionOrQualificationMatch = (
+  reqQual: string,
+  tutorInst: string,
+  tutorDept: string,
+  tutorBio: string,
+  tutorExp: string
+): boolean => {
+  const req = reqQual.toLowerCase().trim();
+  const inst = tutorInst.toLowerCase().trim();
+  const dept = tutorDept.toLowerCase().trim();
+  const bio = tutorBio.toLowerCase().trim();
+  const allTutorText = `${inst} ${dept} ${bio} ${tutorExp.toLowerCase()}`;
+
+  if (!req || req === "any" || req === "open for all") return true;
+
+  // Broad Categories
+  if (req.includes("public university")) {
+    const publicKeywords = [
+      "public", "du", "buet", "ju", "ru", "cu", "jnu", "sust", "cuet", "ruet",
+      "kuet", "butex", "mist", "iut", "bup", "dmc", "medical", "bau", "just",
+      "mbstu", "nstu", "pust", "pstu", "hstu", "cou", "jkkniu", "brur", "dhaka university",
+      "chittagong university", "rajshahi university", "jahangirnagar"
+    ];
+    return publicKeywords.some((k) => allTutorText.includes(k));
+  }
+
+  if (req.includes("engineering")) {
+    const engKeywords = [
+      "buet", "cuet", "ruet", "kuet", "butex", "mist", "iut", "duet",
+      "aust", "aiub", "engineering", "cse", "eee", "mechanical", "civil", "textile"
+    ];
+    return engKeywords.some((k) => allTutorText.includes(k));
+  }
+
+  if (req.includes("medical") || req.includes("mbbs") || req.includes("bds")) {
+    const medKeywords = [
+      "medical", "mbbs", "bds", "dmc", "ssmc", "mmc", "cmc", "rmc",
+      "suhrawardy", "doctor", "dental", "pharma", "pharmacy"
+    ];
+    return medKeywords.some((k) => allTutorText.includes(k));
+  }
+
+  if (req.includes("private university")) {
+    const privKeywords = [
+      "nsu", "north south", "brac", "aiub", "aust", "ewu", "east west",
+      "uiu", "iub", "ulab", "daffodil", "diu", "green university", "uap", "stamford", "seu"
+    ];
+    return privKeywords.some((k) => allTutorText.includes(k));
+  }
+
+  if (
+    req.includes("english medium") ||
+    req.includes("cambridge") ||
+    req.includes("edexcel") ||
+    req.includes("o level") ||
+    req.includes("a level")
+  ) {
+    const emKeywords = [
+      "english medium", "cambridge", "edexcel", "o level", "a level", "o/a level", "igcse", "ielts"
+    ];
+    return emKeywords.some((k) => allTutorText.includes(k));
+  }
+
+  if (req.includes("madrasah") || req.includes("islamic")) {
+    const madKeywords = [
+      "madrasah", "madrasa", "islamic", "arabic", "alim", "fazil", "kamil", "quran", "dakhil"
+    ];
+    return madKeywords.some((k) => allTutorText.includes(k));
+  }
+
+  // Specific Institutions alias mapping
+  const aliasMap: Record<string, string[]> = {
+    buet: ["buet", "bangladesh university of engineering"],
+    "university of dhaka": ["dhaka university", "university of dhaka", "du"],
+    du: ["dhaka university", "university of dhaka", "du"],
+    "jahangirnagar university": ["jahangirnagar", "ju"],
+    ju: ["jahangirnagar", "ju"],
+    "rajshahi university": ["rajshahi university", "ru"],
+    ru: ["rajshahi university", "ru"],
+    "chittagong university": ["chittagong university", "cu"],
+    cu: ["chittagong university", "cu"],
+    "jagannath university": ["jagannath university", "jnu"],
+    jnu: ["jagannath university", "jnu"],
+    sust: ["sust", "shahjalal university"],
+    bup: ["bup", "professionals"],
+    cuet: ["cuet", "chittagong university of engineering"],
+    ruet: ["ruet", "rajshahi university of engineering"],
+    kuet: ["kuet", "khulna university of engineering"],
+    butex: ["butex", "textiles"],
+    mist: ["mist", "military institute"],
+    iut: ["iut", "islamic university of technology"],
+    "dhaka medical college": ["dhaka medical", "dmc"],
+    dmc: ["dhaka medical", "dmc"],
+    nsu: ["north south", "nsu"],
+    "north south university": ["north south", "nsu"],
+    brac: ["brac", "bracu"],
+    "brac university": ["brac", "bracu"],
+    aust: ["aust", "ahsanullah"],
+    aiub: ["aiub", "american international"],
+    ewu: ["east west", "ewu"],
+    "east west university": ["east west", "ewu"],
+    uiu: ["united international", "uiu"],
+    iub: ["independent university", "iub"],
+    ulab: ["liberal arts", "ulab"],
+    "dhaka college": ["dhaka college"],
+    "eden college": ["eden"],
+    "titumir college": ["titumir"],
+    "notre dame college": ["notre dame", "ndc"],
+  };
+
+  for (const [key, aliases] of Object.entries(aliasMap)) {
+    if (req.includes(key)) {
+      if (aliases.some((a) => allTutorText.includes(a))) return true;
+    }
+  }
+
+  // Fallback: token check
+  const tokens = req.split(/[,/|() -]+/).filter((t) => t.length > 2);
+  if (tokens.length > 0) {
+    return tokens.some((tok) => allTutorText.includes(tok));
+  }
+
+  return allTutorText.includes(req);
+};
+
 const createTuitionPost = async (
   studentId: string,
   payload: ICreateTuitionPost
@@ -433,28 +558,20 @@ const applyForTuition = async (
   }
 
   // 4. Tutor Qualification / Preferred Background Matching Validation (Optional)
-  if (post.tutorQualification && post.tutorQualification.trim()) {
-    const reqQual = post.tutorQualification.toLowerCase().trim();
-    const tutorInst = (tutor.institution || "").toLowerCase().trim();
-    const tutorDept = (tutor.department || "").toLowerCase().trim();
-    const tutorBio = (tutor.bio || "").toLowerCase().trim();
-    const tutorExp = (tutor.totalYearsExp || "").toLowerCase().trim();
-
-    // Split keywords by commas, slashes, or 'or'
-    const keywords = reqQual
-      .split(/[,/|]+|\bor\b/i)
-      .map((k) => k.trim())
-      .filter((k) => k.length > 0);
-
-    const matchesQualification = keywords.some(
-      (kw) =>
-        tutorInst.includes(kw) ||
-        tutorDept.includes(kw) ||
-        tutorBio.includes(kw) ||
-        tutorExp.includes(kw)
+  if (
+    post.tutorQualification &&
+    post.tutorQualification.trim() &&
+    post.tutorQualification.trim().toLowerCase() !== "any"
+  ) {
+    const isMatched = isInstitutionOrQualificationMatch(
+      post.tutorQualification,
+      tutor.institution || "",
+      tutor.department || "",
+      tutor.bio || "",
+      tutor.totalYearsExp || ""
     );
 
-    if (!matchesQualification) {
+    if (!isMatched) {
       throw new AppError(
         `Profile Mismatch: This tuition post specifically requires tutors with qualification/institution: "${post.tutorQualification}". Your profile (${tutor.institution || "No institution specified"}) does not match this requirement.`,
         400

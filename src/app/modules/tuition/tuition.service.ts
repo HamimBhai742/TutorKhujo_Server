@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { AppError } from "../../error/AppError";
 import { prisma } from "../../lib/prisma";
 import { NotificationService } from "../notification/notification.service";
+import { sendEmail } from "../../utils/sendEmail";
 import {
   ICreateApplication,
   ICreateTuitionPost,
@@ -26,6 +27,7 @@ const createTuitionPost = async (
       frequency: payload.frequency || "3 Days / Week",
       location: payload.location,
       genderPreference: payload.genderPreference || "Any",
+      tutorQualification: payload.tutorQualification || null,
       extraNotes: payload.extraNotes || null,
       status: "Active",
     },
@@ -230,6 +232,7 @@ const updateTuitionPost = async (
       location: payload.location,
       status: payload.status,
       genderPreference: payload.genderPreference,
+      tutorQualification: payload.tutorQualification,
       extraNotes: payload.extraNotes,
     },
     include: {
@@ -340,6 +343,16 @@ const applyForTuition = async (
 
   const post = await prisma.tuitionPost.findUnique({
     where: { id: tuitionPostId },
+    include: {
+      student: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+        },
+      },
+    },
   });
 
   if (!post) {
@@ -352,6 +365,101 @@ const applyForTuition = async (
 
   if (post.studentId === tutorId) {
     throw new AppError("You cannot apply to your own tuition post", 400);
+  }
+
+  // --- Profile Matching Validations ---
+
+  // 1. Gender Preference Validation
+  if (post.genderPreference && post.genderPreference !== "Any") {
+    if (!tutor.gender) {
+      throw new AppError(
+        `This tuition post specifically requires a ${post.genderPreference} tutor. Please update your gender in your profile to apply.`,
+        400
+      );
+    }
+    if (tutor.gender.toLowerCase() !== post.genderPreference.toLowerCase()) {
+      throw new AppError(
+        `Profile Mismatch: This tuition post specifically requires a ${post.genderPreference} tutor. Your profile gender is set to ${tutor.gender}.`,
+        400
+      );
+    }
+  }
+
+  // 2. Subject Matching Validation
+  if (post.subjects && post.subjects.length > 0 && tutor.subjects && tutor.subjects.length > 0) {
+    const tutorSubs = tutor.subjects.map((s) => s.toLowerCase().trim());
+    const postSubs = post.subjects.map((s) => s.toLowerCase().trim());
+
+    const hasSubjectMatch = postSubs.some((ps) =>
+      tutorSubs.some(
+        (ts) =>
+          ts.includes(ps) ||
+          ps.includes(ts) ||
+          (ps.includes("math") && ts.includes("math")) ||
+          (ps.includes("english") && ts.includes("english")) ||
+          (ps.includes("physics") && ts.includes("physics")) ||
+          (ps.includes("chemistry") && ts.includes("chemistry")) ||
+          (ps.includes("biology") && ts.includes("biology")) ||
+          (ps.includes("ict") && ts.includes("ict")) ||
+          (ps.includes("bangla") && ts.includes("bangla")) ||
+          (ps.includes("accounting") && ts.includes("accounting")) ||
+          (ps.includes("economics") && ts.includes("economics")) ||
+          (ps.includes("science") && ts.includes("science"))
+      )
+    );
+
+    if (!hasSubjectMatch) {
+      throw new AppError(
+        `Profile Mismatch: Your teaching subjects (${tutor.subjects.join(", ")}) do not match the required subjects for this tuition (${post.subjects.join(", ")}).`,
+        400
+      );
+    }
+  }
+
+  // 3. Tuition Mode Matching Validation
+  if (post.mode && post.mode !== "Both" && tutor.tuitionModes && tutor.tuitionModes.length > 0) {
+    const tutorModesLower = tutor.tuitionModes.map((m) => m.toLowerCase().trim());
+    const postModeLower = post.mode.toLowerCase().trim();
+    const matchesMode = tutorModesLower.some(
+      (tm) => tm === postModeLower || tm === "both" || tm.includes(postModeLower)
+    );
+
+    if (!matchesMode) {
+      throw new AppError(
+        `Profile Mismatch: This tuition post requires ${post.mode} tuition. Your profile is configured for ${tutor.tuitionModes.join(", ")}.`,
+        400
+      );
+    }
+  }
+
+  // 4. Tutor Qualification / Preferred Background Matching Validation (Optional)
+  if (post.tutorQualification && post.tutorQualification.trim()) {
+    const reqQual = post.tutorQualification.toLowerCase().trim();
+    const tutorInst = (tutor.institution || "").toLowerCase().trim();
+    const tutorDept = (tutor.department || "").toLowerCase().trim();
+    const tutorBio = (tutor.bio || "").toLowerCase().trim();
+    const tutorExp = (tutor.totalYearsExp || "").toLowerCase().trim();
+
+    // Split keywords by commas, slashes, or 'or'
+    const keywords = reqQual
+      .split(/[,/|]+|\bor\b/i)
+      .map((k) => k.trim())
+      .filter((k) => k.length > 0);
+
+    const matchesQualification = keywords.some(
+      (kw) =>
+        tutorInst.includes(kw) ||
+        tutorDept.includes(kw) ||
+        tutorBio.includes(kw) ||
+        tutorExp.includes(kw)
+    );
+
+    if (!matchesQualification) {
+      throw new AppError(
+        `Profile Mismatch: This tuition post specifically requires tutors with qualification/institution: "${post.tutorQualification}". Your profile (${tutor.institution || "No institution specified"}) does not match this requirement.`,
+        400
+      );
+    }
   }
 
   const existingApplication = await prisma.tuitionApplication.findUnique({
@@ -383,12 +491,15 @@ const applyForTuition = async (
           name: true,
           email: true,
           mobile: true,
+          institution: true,
+          department: true,
+          totalYearsExp: true,
         },
       },
     },
   });
 
-  // Notify the student that a tutor has applied to their post
+  // Notify the student that a tutor has applied to their post (in-app notification)
   NotificationService.sendNotification({
     userId: post.studentId,
     title: "New Tutor Application! 📝",
@@ -396,6 +507,50 @@ const applyForTuition = async (
     type: "NEW_APPLICATION",
     link: "/dashboard?tab=applications",
   }).catch((err) => console.error("[Notification] Failed to notify student of new application:", err));
+
+  // Send Email notification to student
+  if (post.student?.email) {
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+    const emailHtml = `
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9fbfb; border-radius: 16px; overflow: hidden; border: 1px solid #e5e7eb;">
+        <div style="background-color: #0F5B47; padding: 28px 24px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0.5px;">TutorKhojo</h1>
+          <p style="color: #a7f3d0; margin: 6px 0 0 0; font-size: 13px;">New Tutor Application Received 📝</p>
+        </div>
+        <div style="padding: 28px 24px; background-color: #ffffff;">
+          <p style="font-size: 15px; color: #1f2937; margin: 0 0 16px 0;">Hello <strong>${post.student.name}</strong>,</p>
+          <p style="font-size: 14px; color: #4b5563; line-height: 1.6; margin: 0 0 20px 0;">
+            A verified tutor has just applied for your tuition post for <strong>${post.classLevel}</strong> (${post.subjects.join(", ")}).
+          </p>
+
+          <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <h3 style="margin: 0 0 12px 0; color: #0F5B47; font-size: 16px; font-weight: 700;">👨‍🏫 Tutor Details:</h3>
+            <p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Name:</strong> ${tutor.name}</p>
+            ${tutor.institution ? `<p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Institution:</strong> ${tutor.institution} ${tutor.department ? `(${tutor.department})` : ""}</p>` : ""}
+            ${tutor.totalYearsExp ? `<p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Experience:</strong> ${tutor.totalYearsExp}</p>` : ""}
+            <p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Salary Bid:</strong> <span style="color: #0F5B47; font-weight: 800; font-size: 15px;">৳${payload.salaryBid}/month</span> (Your budget: ৳${post.budget})</p>
+            ${payload.proposal ? `<p style="margin: 12px 0 0 0; font-size: 13px; color: #4b5563; font-style: italic; background: #ffffff; padding: 12px; border-radius: 8px; border-left: 3px solid #0F5B47;">"${payload.proposal}"</p>` : ""}
+          </div>
+
+          <div style="text-align: center; margin: 28px 0 10px 0;">
+            <a href="${clientUrl}/dashboard?tab=applications" 
+               style="display: inline-block; background-color: #0F5B47; color: #ffffff; text-decoration: none; padding: 13px 30px; font-size: 14px; font-weight: 700; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(15, 91, 71, 0.2);">
+              Review Application in Dashboard →
+            </a>
+          </div>
+        </div>
+        <div style="background-color: #f3f4f6; padding: 16px 24px; text-align: center; font-size: 11px; color: #9ca3af;">
+          © ${new Date().getFullYear()} TutorKhojo. All rights reserved.
+        </div>
+      </div>
+    `;
+
+    sendEmail(
+      post.student.email,
+      `📝 New Application: ${tutor.name} applied for your ${post.classLevel} tuition post`,
+      emailHtml
+    ).catch((err) => console.error("[Email] Failed to send tuition application email to student:", err));
+  }
 
   return result;
 };

@@ -11,6 +11,7 @@ export interface ICreateTuitionPost {
   frequency?: string;
   location: string;
   genderPreference?: string;
+  tutorQualification?: string;
   extraNotes?: string;
 }
 
@@ -24,6 +25,7 @@ export interface IUpdateTuitionPost {
   location?: string;
   status?: TPostStatus;
   genderPreference?: string;
+  tutorQualification?: string;
   extraNotes?: string;
 }
 

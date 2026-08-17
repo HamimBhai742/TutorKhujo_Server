@@ -84,6 +84,7 @@ model TuitionPost {
   location         String
   status           PostStatus   @default(Active)
   genderPreference String?      @default("Any")
+  tutorQualification String?
   extraNotes       String?
   applications     TuitionApplication[]
   createdAt        DateTime     @default(now())

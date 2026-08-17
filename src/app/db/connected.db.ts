@@ -30,6 +30,7 @@ const seedAdmin = async () => {
           role: "admin",
           status: "active",
           isVerified: true,
+          isFirstLogin: false,
         },
       });
       console.log("👑 Admin user seeded successfully!");

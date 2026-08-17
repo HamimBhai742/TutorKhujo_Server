@@ -43,6 +43,8 @@ model User {
   nidCardUrl                 String?
   verificationStatus         VerificationStatus @default(None)
   transactions               Transaction[]
+  conversationsAsStudent     Conversation[] @relation("StudentConversations")
+  conversationsAsTutor       Conversation[] @relation("TutorConversations")
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 }
@@ -157,4 +159,30 @@ enum TransactionStatus {
   Pending
   Success
   Failed
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  studentId String
+  student   User      @relation("StudentConversations", fields: [studentId], references: [id], onDelete: Cascade)
+  tutorId   String
+  tutor     User      @relation("TutorConversations", fields: [tutorId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([studentId, tutorId])
+  @@index([studentId])
+  @@index([tutorId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  content        String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
 }

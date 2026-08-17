@@ -1,14 +1,19 @@
-import { Server } from "http";
+import { createServer, Server as HttpServer } from "http";
 import app from "./app";
 import config from "./config";
 import { connectedDB } from "./app/db/connected.db";
+import { initSocket } from "./app/lib/socket";
 import "./app/workers/email.worker";
 
-let server: Server;
+let server: HttpServer;
 const port = config.port;
 
 const main = () => {
-  server = app.listen(port, () => {
+  server = createServer(app);
+
+  initSocket(server);
+
+  server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
   });
 

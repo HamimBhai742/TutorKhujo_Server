@@ -3,6 +3,7 @@ import app from "./app";
 import config from "./config";
 import { connectedDB } from "./app/db/connected.db";
 import { initSocket } from "./app/lib/socket";
+import "./app/lib/firebase";
 import "./app/workers/email.worker";
 
 let server: HttpServer;

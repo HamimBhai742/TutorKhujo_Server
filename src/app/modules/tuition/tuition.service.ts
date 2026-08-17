@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../error/AppError";
 import { prisma } from "../../lib/prisma";
+import { NotificationService } from "../notification/notification.service";
 import {
   ICreateApplication,
   ICreateTuitionPost,
@@ -39,6 +40,9 @@ const createTuitionPost = async (
       },
     },
   });
+
+  // Notify matching tutors in background
+  NotificationService.notifyMatchingTutors(result);
 
   return result;
 };

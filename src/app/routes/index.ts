@@ -5,6 +5,7 @@ import { tuitionRoutes } from "../modules/tuition/tuition.routes";
 import { settingsRoutes } from "../modules/settings/settings.routes";
 import { paymentRoutes } from "../modules/payment/payment.routes";
 import { messageRoutes } from "../modules/message/message.routes";
+import { notificationRoutes } from "../modules/notification/notification.routes";
 
 export const router = Router();
 
@@ -32,6 +33,10 @@ const moduleRoutes: Array<{ path: string; route: Router }> = [
   {
     path: "/messages",
     route: messageRoutes,
+  },
+  {
+    path: "/notifications",
+    route: notificationRoutes,
   },
 ];
 

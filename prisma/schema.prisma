@@ -45,6 +45,8 @@ model User {
   transactions               Transaction[]
   conversationsAsStudent     Conversation[] @relation("StudentConversations")
   conversationsAsTutor       Conversation[] @relation("TutorConversations")
+  notifications              Notification[]
+  deviceTokens               DeviceToken[]
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 }
@@ -185,4 +187,29 @@ model Message {
   createdAt      DateTime     @default(now())
 
   @@index([conversationId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   // e.g. 'TUITION_MATCH', 'APPLICATION_STATUS', 'CHAT'
+  link      String?  // navigation link e.g. '/dashboard/tuitions'
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String   // 'web', 'android', 'ios'
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

@@ -147,6 +147,20 @@ const toggleBlockConversation = catchAsync(async (req: Request, res: Response) =
   });
 });
 
+const reactToMessage = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const { messageId } = req.params;
+  const { emoji } = req.body;
+  const result = await MessageService.reactToMessage(messageId, user.id, emoji);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Reaction updated successfully",
+    data: result,
+  });
+});
+
 export const MessageController = {
   createConversation,
   getMyConversations,
@@ -157,4 +171,5 @@ export const MessageController = {
   deleteMessage,
   deleteConversation,
   toggleBlockConversation,
+  reactToMessage,
 };

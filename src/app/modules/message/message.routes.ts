@@ -11,6 +11,7 @@ router.patch("/conversations/block/:conversationId", auth("student", "tutor"), M
 router.post("/", auth("student", "tutor"), MessageController.sendMessage);
 router.patch("/read/:conversationId", auth("student", "tutor"), MessageController.markAsRead);
 router.get("/:conversationId", auth("student", "tutor"), MessageController.getMessages);
+router.post("/:messageId/react", auth("student", "tutor"), MessageController.reactToMessage);
 router.patch("/:messageId", auth("student", "tutor"), MessageController.updateMessage);
 router.delete("/:messageId", auth("student", "tutor"), MessageController.deleteMessage);
 

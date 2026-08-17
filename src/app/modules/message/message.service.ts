@@ -223,6 +223,15 @@ const getMessages = async (conversationId: string, requestingUserId: string) => 
 
   const messages = await prisma.message.findMany({
     where: { conversationId },
+    include: {
+      reactions: {
+        select: {
+          id: true,
+          userId: true,
+          emoji: true,
+        },
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
 
@@ -235,6 +244,7 @@ const getMessages = async (conversationId: string, requestingUserId: string) => 
       content: m.content,
       isRead: m.isRead,
       createdAt: m.createdAt,
+      reactions: m.reactions || [],
       time: new Date(m.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
     })),
   };
@@ -450,6 +460,90 @@ const toggleBlockConversation = async (conversationId: string, requestingUserId:
   return updated;
 };
 
+const reactToMessage = async (messageId: string, userId: string, emoji: string) => {
+  if (!emoji || !emoji.trim()) {
+    throw new AppError("Emoji is required", 400);
+  }
+
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    include: { conversation: true },
+  });
+
+  if (!message) {
+    throw new AppError("Message not found", 404);
+  }
+
+  if (message.conversation.studentId !== userId && message.conversation.tutorId !== userId) {
+    throw new AppError("You are not authorized to react to this message", 403);
+  }
+
+  if (message.conversation.isBlocked) {
+    throw new AppError("Cannot react to messages in a blocked conversation", 400);
+  }
+
+  const existing = await prisma.messageReaction.findUnique({
+    where: {
+      messageId_userId: {
+        messageId,
+        userId,
+      },
+    },
+  });
+
+  if (existing) {
+    if (existing.emoji === emoji) {
+      // Toggle off if same emoji
+      await prisma.messageReaction.delete({
+        where: { id: existing.id },
+      });
+    } else {
+      // Switch emoji
+      await prisma.messageReaction.update({
+        where: { id: existing.id },
+        data: { emoji },
+      });
+    }
+  } else {
+    // Create new reaction
+    await prisma.messageReaction.create({
+      data: {
+        messageId,
+        userId,
+        emoji,
+      },
+    });
+  }
+
+  const updatedReactions = await prisma.messageReaction.findMany({
+    where: { messageId },
+    select: {
+      id: true,
+      userId: true,
+      emoji: true,
+    },
+  });
+
+  const recipientId =
+    message.conversation.studentId === userId
+      ? message.conversation.tutorId
+      : message.conversation.studentId;
+
+  try {
+    const io = getIO();
+    const payload = {
+      messageId,
+      conversationId: message.conversationId,
+      reactions: updatedReactions,
+    };
+    io.to(recipientId).emit("message_reaction_updated", payload);
+    io.to(userId).emit("message_reaction_updated", payload);
+    io.to(message.conversationId).emit("message_reaction_updated", payload);
+  } catch (_) {}
+
+  return updatedReactions;
+};
+
 export const MessageService = {
   createConversation,
   getMyConversations,
@@ -460,4 +554,5 @@ export const MessageService = {
   deleteMessage,
   deleteConversation,
   toggleBlockConversation,
+  reactToMessage,
 };

@@ -189,23 +189,27 @@ const onboardTutor = async (userId: string, payload: any) => {
     throw new AppError("User not found", 404);
   }
 
-  const { fullName, salary, ...rest } = payload;
+  const { fullName, salary, expectedSalary, qualifications, ...rest } = payload;
 
   const updateData: any = {
     ...rest,
+    role: "tutor",
     isFirstLogin: false,
-    verificationStatus: "Pending",
+    isVerified: true,
+    verificationStatus: "Approved",
   };
 
   if (fullName) {
     updateData.name = fullName;
   }
-  if (salary !== undefined) {
+  if (salary !== undefined && salary !== null && !isNaN(Number(salary))) {
     updateData.expectedSalary = Number(salary);
+  } else if (expectedSalary !== undefined && expectedSalary !== null && !isNaN(Number(expectedSalary))) {
+    updateData.expectedSalary = Number(expectedSalary);
   }
 
-  if (Array.isArray(payload.qualifications) && payload.qualifications.length > 0) {
-    const primary = payload.qualifications[0];
+  if (Array.isArray(qualifications) && qualifications.length > 0) {
+    const primary = qualifications[0];
     if (primary?.institution) updateData.institution = primary.institution;
     if (primary?.subject) updateData.department = primary.subject;
     if (primary?.level) updateData.yearOfStudy = primary.level;

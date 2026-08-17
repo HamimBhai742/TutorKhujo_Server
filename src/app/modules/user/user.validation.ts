@@ -43,6 +43,7 @@ const onboardTutorValidationSchema = z.object({
     qualifications: z.array(z.any()).optional(),
     tuitionModes: z.array(z.string()).optional(),
     subjects: z.array(z.string()).optional(),
+    salary: z.number().optional(),
     expectedSalary: z.number().optional(),
     availability: z.any().optional(),
     totalYearsExp: z.string().optional(),

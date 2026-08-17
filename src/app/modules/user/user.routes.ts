@@ -17,7 +17,7 @@ router.patch(
 
 router.patch(
   "/me/onboard",
-  auth("tutor", "admin"),
+  auth("student", "tutor", "admin"),
   validateRequest(UserValidation.onboardTutorValidationSchema),
   UserController.onboardTutor
 );

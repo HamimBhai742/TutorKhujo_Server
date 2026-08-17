@@ -137,6 +137,30 @@ const isInstitutionOrQualificationMatch = (
   return allTutorText.includes(req);
 };
 
+export const calculateTutorProfileCompleteness = (tutor: any): number => {
+  let score = 0;
+  // 1. Full Name (10%)
+  if (tutor.name && tutor.name.trim().length >= 3) score += 10;
+  // 2. Gender (10%)
+  if (tutor.gender && (tutor.gender === "Male" || tutor.gender === "Female")) score += 10;
+  // 3. City / Location (10%)
+  if (tutor.city && tutor.city.trim().length >= 2) score += 10;
+  // 4. Bio / About (10%)
+  if (tutor.bio && tutor.bio.trim().length >= 10) score += 10;
+  // 5. University / Institution (15%)
+  if (tutor.institution && tutor.institution.trim().length >= 2) score += 15;
+  // 6. Department / Field of Study (10%)
+  if (tutor.department && tutor.department.trim().length >= 2) score += 10;
+  // 7. Teaching Subjects (15%)
+  if (Array.isArray(tutor.subjects) && tutor.subjects.length > 0) score += 15;
+  // 8. Tuition Modes (10%)
+  if (Array.isArray(tutor.tuitionModes) && tutor.tuitionModes.length > 0) score += 10;
+  // 9. Total Experience (10%)
+  if (tutor.totalYearsExp && tutor.totalYearsExp.trim().length > 0) score += 10;
+
+  return Math.min(100, score);
+};
+
 const createTuitionPost = async (
   studentId: string,
   payload: ICreateTuitionPost
@@ -492,11 +516,20 @@ const applyForTuition = async (
     throw new AppError("You cannot apply to your own tuition post", 400);
   }
 
+  // --- Profile Completeness Validation (Must be at least 80% Complete) ---
+  const completeness = calculateTutorProfileCompleteness(tutor);
+  if (completeness < 80) {
+    throw new AppError(
+      `Your tutor profile is only ${completeness}% complete. You must complete at least 80% of your profile setup (including Gender, University, Department, and Teaching Subjects) before applying for tuition posts.`,
+      400
+    );
+  }
+
   // --- Profile Matching Validations ---
 
   // 1. Gender Preference Validation
   if (post.genderPreference && post.genderPreference !== "Any") {
-    if (!tutor.gender) {
+    if (!tutor.gender || !tutor.gender.trim()) {
       throw new AppError(
         `This tuition post specifically requires a ${post.genderPreference} tutor. Please update your gender in your profile to apply.`,
         400
@@ -563,6 +596,13 @@ const applyForTuition = async (
     post.tutorQualification.trim() &&
     post.tutorQualification.trim().toLowerCase() !== "any"
   ) {
+    if (!tutor.institution && !tutor.department && !tutor.bio) {
+      throw new AppError(
+        `This tuition post specifically requires tutors with qualification: "${post.tutorQualification}". Please update your university/qualification in your profile to apply.`,
+        400
+      );
+    }
+
     const isMatched = isInstitutionOrQualificationMatch(
       post.tutorQualification,
       tutor.institution || "",

@@ -3,9 +3,25 @@ import { z } from "zod";
 const updateProfileValidationSchema = z.object({
   body: z.object({
     name: z.string().optional(),
+    mobile: z.string().optional(),
+    dob: z.string().optional(),
+    gender: z.string().optional(),
+    city: z.string().optional(),
+    bio: z.string().optional(),
+    profilePic: z.string().optional(),
+    institution: z.string().optional(),
+    department: z.string().optional(),
+    yearOfStudy: z.string().optional(),
+    subjects: z.array(z.string()).optional(),
+    tuitionModes: z.array(z.string()).optional(),
+    expectedSalary: z.number().optional(),
+    availability: z.any().optional(),
+    totalYearsExp: z.string().optional(),
+    experiences: z.any().optional(),
+    certificateUrl: z.string().optional(),
+    nidCardUrl: z.string().optional(),
     role: z.enum(["student", "tutor"]).optional(),
     isFirstLogin: z.boolean().optional(),
-    availability: z.any().optional(),
   }),
 });
 

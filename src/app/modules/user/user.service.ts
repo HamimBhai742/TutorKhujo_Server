@@ -3,20 +3,40 @@ import { prisma } from "../../lib/prisma";
 import { IUpdateProfile, IUpdateUserStatus } from "./user.interface";
 import { NotificationService } from "../notification/notification.service";
 
+const userSelectFields = {
+  id: true,
+  name: true,
+  email: true,
+  mobile: true,
+  role: true,
+  status: true,
+  isVerified: true,
+  isFirstLogin: true,
+  gender: true,
+  dob: true,
+  city: true,
+  bio: true,
+  profilePic: true,
+  institution: true,
+  department: true,
+  yearOfStudy: true,
+  subjects: true,
+  tuitionModes: true,
+  expectedSalary: true,
+  availability: true,
+  totalYearsExp: true,
+  experiences: true,
+  certificateUrl: true,
+  nidCardUrl: true,
+  verificationStatus: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
 const getMe = async (userId: string) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      isVerified: true,
-      isFirstLogin: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: userSelectFields,
   });
 
   if (!user) {
@@ -38,17 +58,7 @@ const updateMe = async (userId: string, payload: IUpdateProfile) => {
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: payload,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      isVerified: true,
-      isFirstLogin: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: userSelectFields,
   });
 
   return updatedUser;
@@ -194,21 +204,17 @@ const onboardTutor = async (userId: string, payload: any) => {
     updateData.expectedSalary = Number(salary);
   }
 
+  if (Array.isArray(payload.qualifications) && payload.qualifications.length > 0) {
+    const primary = payload.qualifications[0];
+    if (primary?.institution) updateData.institution = primary.institution;
+    if (primary?.subject) updateData.department = primary.subject;
+    if (primary?.level) updateData.yearOfStudy = primary.level;
+  }
+
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: updateData,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      isVerified: true,
-      isFirstLogin: true,
-      verificationStatus: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: userSelectFields,
   });
 
   return updatedUser;

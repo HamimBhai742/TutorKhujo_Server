@@ -46,6 +46,7 @@ model User {
   transactions               Transaction[]
   conversationsAsStudent     Conversation[] @relation("StudentConversations")
   conversationsAsTutor       Conversation[] @relation("TutorConversations")
+  blockedConversations       Conversation[] @relation("BlockedConversations")
   notifications              Notification[]
   deviceTokens               DeviceToken[]
   refreshTokens              RefreshToken[]
@@ -182,14 +183,17 @@ enum TransactionStatus {
 }
 
 model Conversation {
-  id        String    @id @default(uuid())
-  studentId String
-  student   User      @relation("StudentConversations", fields: [studentId], references: [id], onDelete: Cascade)
-  tutorId   String
-  tutor     User      @relation("TutorConversations", fields: [tutorId], references: [id], onDelete: Cascade)
-  messages  Message[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  studentId   String
+  student     User      @relation("StudentConversations", fields: [studentId], references: [id], onDelete: Cascade)
+  tutorId     String
+  tutor       User      @relation("TutorConversations", fields: [tutorId], references: [id], onDelete: Cascade)
+  isBlocked   Boolean   @default(false)
+  blockedById String?
+  blockedBy   User?     @relation("BlockedConversations", fields: [blockedById], references: [id], onDelete: SetNull)
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@unique([studentId, tutorId])
   @@index([studentId])

@@ -94,10 +94,67 @@ const markAsRead = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const updateMessage = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const { messageId } = req.params;
+  const { content } = req.body;
+  const result = await MessageService.updateMessage(messageId, user.id, content);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Message updated successfully",
+    data: result,
+  });
+});
+
+const deleteMessage = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const { messageId } = req.params;
+  const result = await MessageService.deleteMessage(messageId, user.id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Message deleted successfully",
+    data: result,
+  });
+});
+
+const deleteConversation = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const { conversationId } = req.params;
+  const result = await MessageService.deleteConversation(conversationId, user.id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Conversation deleted successfully",
+    data: result,
+  });
+});
+
+const toggleBlockConversation = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const { conversationId } = req.params;
+  const result = await MessageService.toggleBlockConversation(conversationId, user.id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.isBlocked ? "Contact blocked successfully" : "Contact unblocked successfully",
+    data: result,
+  });
+});
+
 export const MessageController = {
   createConversation,
   getMyConversations,
   sendMessage,
   getMessages,
   markAsRead,
+  updateMessage,
+  deleteMessage,
+  deleteConversation,
+  toggleBlockConversation,
 };

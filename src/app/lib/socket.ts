@@ -4,6 +4,7 @@ import jwt, { JwtPayload, Secret } from "jsonwebtoken";
 import config from "../../config";
 import { isRedisAvailable, redisClient } from "./redis";
 import { createAdapter } from "@socket.io/redis-adapter";
+import { prisma } from "./prisma";
 
 let io: SocketServer | null = null;
 const userSockets = new Map<string, Set<string>>(); // userId -> Set of socketIds
@@ -95,10 +96,38 @@ export const initSocket = async (httpServer: HttpServer) => {
       console.log(`[Socket] User connected: ${userId} (${socket.id}). Online: ${userSockets.size}`);
     }
 
+    // Join conversation room
+    socket.on("join_conversation", (conversationId: string) => {
+      if (conversationId) {
+        socket.join(conversationId);
+      }
+    });
+
     // Typing start indicator
-    socket.on("typing_start", (data: { conversationId: string; recipientId: string }) => {
-      if (data?.recipientId && userId) {
-        io?.to(data.recipientId).emit("typing_status", {
+    socket.on("typing_start", async (data: { conversationId: string; recipientId?: string }) => {
+      let targetRecipientId = data?.recipientId;
+      if (!targetRecipientId && data?.conversationId) {
+        try {
+          const conv = await prisma.conversation.findUnique({
+            where: { id: data.conversationId },
+            select: { studentId: true, tutorId: true },
+          });
+          if (conv) {
+            targetRecipientId = conv.studentId === userId ? conv.tutorId : conv.studentId;
+          }
+        } catch (_) {}
+      }
+
+      if (targetRecipientId) {
+        io?.to(targetRecipientId).emit("typing_status", {
+          conversationId: data.conversationId,
+          senderId: userId,
+          isTyping: true,
+        });
+      }
+
+      if (data?.conversationId) {
+        socket.to(data.conversationId).emit("typing_status", {
           conversationId: data.conversationId,
           senderId: userId,
           isTyping: true,
@@ -107,9 +136,30 @@ export const initSocket = async (httpServer: HttpServer) => {
     });
 
     // Typing stop indicator
-    socket.on("typing_stop", (data: { conversationId: string; recipientId: string }) => {
-      if (data?.recipientId && userId) {
-        io?.to(data.recipientId).emit("typing_status", {
+    socket.on("typing_stop", async (data: { conversationId: string; recipientId?: string }) => {
+      let targetRecipientId = data?.recipientId;
+      if (!targetRecipientId && data?.conversationId) {
+        try {
+          const conv = await prisma.conversation.findUnique({
+            where: { id: data.conversationId },
+            select: { studentId: true, tutorId: true },
+          });
+          if (conv) {
+            targetRecipientId = conv.studentId === userId ? conv.tutorId : conv.studentId;
+          }
+        } catch (_) {}
+      }
+
+      if (targetRecipientId) {
+        io?.to(targetRecipientId).emit("typing_status", {
+          conversationId: data.conversationId,
+          senderId: userId,
+          isTyping: false,
+        });
+      }
+
+      if (data?.conversationId) {
+        socket.to(data.conversationId).emit("typing_status", {
           conversationId: data.conversationId,
           senderId: userId,
           isTyping: false,
@@ -118,9 +168,29 @@ export const initSocket = async (httpServer: HttpServer) => {
     });
 
     // Read receipts
-    socket.on("mark_read", (data: { conversationId: string; recipientId: string }) => {
-      if (data?.recipientId && userId) {
-        io?.to(data.recipientId).emit("messages_read", {
+    socket.on("mark_read", async (data: { conversationId: string; recipientId?: string }) => {
+      let targetRecipientId = data?.recipientId;
+      if (!targetRecipientId && data?.conversationId) {
+        try {
+          const conv = await prisma.conversation.findUnique({
+            where: { id: data.conversationId },
+            select: { studentId: true, tutorId: true },
+          });
+          if (conv) {
+            targetRecipientId = conv.studentId === userId ? conv.tutorId : conv.studentId;
+          }
+        } catch (_) {}
+      }
+
+      if (targetRecipientId) {
+        io?.to(targetRecipientId).emit("messages_read", {
+          conversationId: data.conversationId,
+          readerId: userId,
+        });
+      }
+
+      if (data?.conversationId) {
+        socket.to(data.conversationId).emit("messages_read", {
           conversationId: data.conversationId,
           readerId: userId,
         });

@@ -26,7 +26,20 @@ const processPayout = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getMyTransactions = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const result = await PaymentService.getMyTransactions(user.id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Your transactions retrieved successfully",
+    data: result,
+  });
+});
+
 export const PaymentController = {
   getAllTransactions,
   processPayout,
+  getMyTransactions,
 };

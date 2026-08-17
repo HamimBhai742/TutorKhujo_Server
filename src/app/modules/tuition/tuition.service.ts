@@ -405,12 +405,21 @@ const getTutorAppliedPosts = async (tutorId: string) => {
     where: {
       tutorId,
     },
-    select: {
-      id: true,
-      tuitionPostId: true,
-      salaryBid: true,
-      status: true,
-      createdAt: true,
+    include: {
+      tuitionPost: {
+        include: {
+          student: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
     },
   });
 
@@ -434,7 +443,11 @@ const updateApplicationStatus = async (
     throw new AppError("Application not found", 404);
   }
 
-  if (application.tuitionPost.studentId !== userId && userRole !== "admin") {
+  if (
+    application.tuitionPost.studentId !== userId &&
+    application.tutorId !== userId &&
+    userRole !== "admin"
+  ) {
     throw new AppError("You are not authorized to update this application", 403);
   }
 

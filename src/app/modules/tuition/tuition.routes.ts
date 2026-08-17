@@ -37,7 +37,7 @@ router.get(
 // Protected: Update application status (Shortlisted / Hired / Rejected)
 router.patch(
   "/applications/:applicationId/status",
-  auth("student", "admin"),
+  auth("student", "tutor", "admin"),
   validateRequest(TuitionValidation.updateApplicationStatusValidationSchema),
   TuitionController.updateApplicationStatus
 );

@@ -72,7 +72,25 @@ const processPayout = async (transactionId: string) => {
   };
 };
 
+const getMyTransactions = async (userId: string) => {
+  const transactions = await prisma.transaction.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return transactions.map((t) => ({
+    id: t.id,
+    amount: t.amount,
+    status: t.status === "Success" ? "Paid" : t.status === "Pending" ? "Processing" : "Failed",
+    date: t.createdAt.toISOString().split("T")[0],
+    method: t.method,
+    description: t.type === "Tutor_Payout" ? "Monthly Tuition Disbursed" : "Tuition Fee Invoice",
+    reference: t.reference,
+  }));
+};
+
 export const PaymentService = {
   getAllTransactions,
   processPayout,
+  getMyTransactions,
 };

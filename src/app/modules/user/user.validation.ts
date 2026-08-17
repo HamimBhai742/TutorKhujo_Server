@@ -5,6 +5,7 @@ const updateProfileValidationSchema = z.object({
     name: z.string().optional(),
     role: z.enum(["student", "tutor"]).optional(),
     isFirstLogin: z.boolean().optional(),
+    availability: z.any().optional(),
   }),
 });
 

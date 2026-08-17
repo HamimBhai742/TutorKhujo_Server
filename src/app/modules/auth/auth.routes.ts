@@ -67,4 +67,7 @@ router.post(
   AuthController.resetPassword
 );
 
+// Logout — revokes refresh token from DB to prevent reuse
+router.post("/logout", AuthController.logout);
+
 export const authRoutes = router;

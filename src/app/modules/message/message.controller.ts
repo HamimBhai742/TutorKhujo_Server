@@ -4,8 +4,15 @@ import { sendResponse } from "../../utils/sendResponse";
 import { MessageService } from "./message.service";
 
 const createConversation = catchAsync(async (req: Request, res: Response) => {
-  const { studentId, tutorId } = req.body;
-  const result = await MessageService.createConversation(studentId, tutorId);
+  const user = req.user!;
+  const { otherUserId } = req.body;
+
+  // Use the authenticated user's ID as one participant — prevents creating fake conversations
+  const result = await MessageService.createConversation(
+    user.id,
+    user.role as "student" | "tutor",
+    otherUserId
+  );
 
   sendResponse(res, {
     statusCode: 200,
@@ -41,8 +48,10 @@ const sendMessage = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getMessages = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
   const { conversationId } = req.params;
-  const result = await MessageService.getMessages(conversationId);
+  // Pass userId for authorization — service verifies user is a conversation participant
+  const result = await MessageService.getMessages(conversationId, user.id);
 
   sendResponse(res, {
     statusCode: 200,

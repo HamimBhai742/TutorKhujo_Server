@@ -28,7 +28,13 @@ const updateMe = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllUsers = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.getAllUsers();
+  const { page, limit, search, role } = req.query;
+  const result = await UserService.getAllUsers({
+    page: page ? Number(page) : undefined,
+    limit: limit ? Number(limit) : undefined,
+    search: search as string | undefined,
+    role: role as string | undefined,
+  });
 
   sendResponse(res, {
     statusCode: 200,

@@ -1,6 +1,7 @@
 import { AppError } from "../../error/AppError";
 import { prisma } from "../../lib/prisma";
 import { IUpdateProfile, IUpdateUserStatus } from "./user.interface";
+import { NotificationService } from "../notification/notification.service";
 
 const getMe = async (userId: string) => {
   const user = await prisma.user.findUnique({
@@ -53,23 +54,58 @@ const updateMe = async (userId: string, payload: IUpdateProfile) => {
   return updatedUser;
 };
 
-const getAllUsers = async () => {
-  const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      mobile: true,
-      isVerified: true,
-      isFirstLogin: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
+const getAllUsers = async (query: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  role?: string;
+}) => {
+  const page = query.page || 1;
+  const limit = Math.min(query.limit || 20, 100); // max 100 per request
+  const skip = (page - 1) * limit;
 
-  return users;
+  const where: Record<string, unknown> = { deletedAt: null };
+  if (query.search) {
+    where.OR = [
+      { name: { contains: query.search, mode: "insensitive" } },
+      { email: { contains: query.search, mode: "insensitive" } },
+    ];
+  }
+  if (query.role) {
+    where.role = query.role;
+  }
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        mobile: true,
+        isVerified: true,
+        verificationStatus: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return {
+    data: users,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
 };
 
 const getUserById = async (userId: string) => {
@@ -126,31 +162,6 @@ const updateUserStatus = async (
   });
 
   return updatedUser;
-};
-
-const deleteUser = async (userId: string) => {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-  });
-
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
-
-  const deletedUser = await prisma.user.delete({
-    where: { id: userId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      isVerified: true,
-      createdAt: true,
-    },
-  });
-
-  return deletedUser;
 };
 
 const onboardTutor = async (userId: string, payload: any) => {
@@ -293,7 +304,50 @@ const updateVerificationStatus = async (
     },
   });
 
+  // Notify the tutor about their verification decision
+  const notifPayload =
+    status === "Approved"
+      ? {
+          title: "Tutor Verification Approved! ✅",
+          message: "Congratulations! Your tutor profile has been verified by our team. You can now apply for tuitions across the platform.",
+          link: "/dashboard",
+        }
+      : {
+          title: "Verification Not Approved",
+          message: "Your tutor verification was reviewed but not approved. Please re-submit valid documents or contact support for assistance.",
+          link: "/tutor-onboarding",
+        };
+
+  NotificationService.sendNotification({
+    userId,
+    title: notifPayload.title,
+    message: notifPayload.message,
+    type: "VERIFICATION_STATUS",
+    link: notifPayload.link,
+  }).catch((err) => console.error("[Notification] Failed to notify tutor of verification status:", err));
+
   return updatedUser;
+};
+
+const deleteUser = async (userId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user || user.deletedAt) {
+    throw new AppError("User not found", 404);
+  }
+
+  // Soft delete — mark deletedAt timestamp and set status inactive
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      deletedAt: new Date(),
+      status: "inactive",
+    },
+  });
+
+  return { message: "User deleted successfully" };
 };
 
 export const UserService = {

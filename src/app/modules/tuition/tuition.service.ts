@@ -156,6 +156,9 @@ const getAllTuitionPosts = async (filters: ITuitionQueryFilters) => {
             email: true,
           },
         },
+        _count: {
+          select: { applications: true }, // Avoids N+1 query for applicant count
+        },
       },
     }),
     prisma.tuitionPost.count({
@@ -364,6 +367,15 @@ const applyForTuition = async (
     },
   });
 
+  // Notify the student that a tutor has applied to their post
+  NotificationService.sendNotification({
+    userId: post.studentId,
+    title: "New Tutor Application! 📝",
+    message: `${result.tutor.name} has applied for your ${post.classLevel} tuition post. Bid: ৳${payload.salaryBid}/month.`,
+    type: "NEW_APPLICATION",
+    link: "/dashboard?tab=applications",
+  }).catch((err) => console.error("[Notification] Failed to notify student of new application:", err));
+
   return result;
 };
 
@@ -477,6 +489,33 @@ const updateApplicationStatus = async (
       where: { id: application.tuitionPostId },
       data: { status: "Paused" },
     });
+  }
+
+  // Notify the tutor about their application status change
+  const statusMessages: Record<string, { title: string; message: string }> = {
+    Shortlisted: {
+      title: "You've been Shortlisted! 🌟",
+      message: `Great news! You have been shortlisted for the ${result.tuitionPost.classLevel} tuition post. Await the student's final decision.`,
+    },
+    Hired: {
+      title: "Congratulations! You're Hired! 🎉",
+      message: `You have been selected for the ${result.tuitionPost.classLevel} tuition post. Please contact the student to confirm your schedule.`,
+    },
+    Rejected: {
+      title: "Application Update",
+      message: `Your application for the ${result.tuitionPost.classLevel} tuition post was not selected this time. Keep applying!`,
+    },
+  };
+
+  const notifContent = statusMessages[status];
+  if (notifContent) {
+    NotificationService.sendNotification({
+      userId: application.tutorId,
+      title: notifContent.title,
+      message: notifContent.message,
+      type: "APPLICATION_STATUS",
+      link: "/dashboard?tab=overview",
+    }).catch((err) => console.error("[Notification] Failed to notify tutor of status change:", err));
   }
 
   return result;

@@ -16,6 +16,7 @@ model User {
   role                       Role      @default(student)
   status                     Status    @default(active)
   isVerified                 Boolean   @default(false)
+  isEmailVerified            Boolean   @default(false)  // Email OTP verified (all users)
   isFirstLogin               Boolean   @default(true)
   otpCode                    String?
   otpExpires                 DateTime?
@@ -47,8 +48,25 @@ model User {
   conversationsAsTutor       Conversation[] @relation("TutorConversations")
   notifications              Notification[]
   deviceTokens               DeviceToken[]
+  refreshTokens              RefreshToken[]
+  deletedAt                  DateTime?  // Soft delete — null means active
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
+
+  @@index([email])
+  @@index([deletedAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
 }
 
 model TuitionPost {
@@ -184,9 +202,11 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   senderId       String
   content        String
+  isRead         Boolean      @default(false)  // For unread message count tracking
   createdAt      DateTime     @default(now())
 
   @@index([conversationId])
+  @@index([isRead])
 }
 
 model Notification {

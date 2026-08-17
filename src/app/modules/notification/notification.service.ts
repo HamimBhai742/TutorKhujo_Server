@@ -150,7 +150,8 @@ const notifyMatchingTutors = async (tuitionPost: {
   classLevel: string;
 }) => {
   try {
-    // Query tutors matching any of the subjects
+    // Cap at 100 matching tutors — prevents unbounded queries at scale.
+    // With 50,000+ tutors teaching Math, a sequential loop would crash the server.
     const matchingTutors = await prisma.user.findMany({
       where: {
         role: "tutor",
@@ -162,20 +163,25 @@ const notifyMatchingTutors = async (tuitionPost: {
       select: {
         id: true,
       },
+      take: 100, // Hard cap — increase or use cursor pagination for larger batches
     });
 
-    console.log(`Found ${matchingTutors.length} matching tutors for tuition post ${tuitionPost.id}`);
+    console.log(`[Notification] Found ${matchingTutors.length} matching tutors for post ${tuitionPost.id} (capped at 100)`);
 
-    // Send notifications to each matching tutor
-    for (const tutor of matchingTutors) {
-      await sendNotification({
-        userId: tutor.id,
-        title: "New Tuition Match! 🎓",
-        message: `A new tuition request for ${tuitionPost.subjects.join(", ")} is available in ${tuitionPost.location}. Budget: ৳${tuitionPost.budget}/mo`,
-        type: "TUITION_MATCH",
-        link: `/tuition-jobs`,
-      });
-    }
+    // Send notifications in PARALLEL — not sequential — for maximum throughput
+    await Promise.all(
+      matchingTutors.map((tutor) =>
+        sendNotification({
+          userId: tutor.id,
+          title: "New Tuition Match! 🎓",
+          message: `A new ${tuitionPost.classLevel} tuition in ${tuitionPost.location} matches your subjects. Budget: ৳${tuitionPost.budget}/mo`,
+          type: "TUITION_MATCH",
+          link: `/tuition-jobs`,
+        }).catch((err) =>
+          console.error(`[Notification] Failed to notify tutor ${tutor.id}:`, err)
+        )
+      )
+    );
   } catch (err) {
     console.error("Error in notifyMatchingTutors:", err);
   }

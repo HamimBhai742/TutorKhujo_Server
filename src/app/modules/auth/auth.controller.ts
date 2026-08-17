@@ -118,6 +118,24 @@ const googleLogin = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const logout = catchAsync(async (req: Request, res: Response) => {
+  const token = req.cookies?.refreshToken || req.body?.refreshToken;
+
+  if (token) {
+    // Delete refresh token from DB — prevents token reuse after logout
+    await AuthService.revokeRefreshToken(token);
+  }
+
+  res.clearCookie("refreshToken");
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Logged out successfully",
+    data: null,
+  });
+});
+
 export const AuthController = {
   registerUser,
   loginUser,
@@ -129,4 +147,5 @@ export const AuthController = {
   resetPassword,
   changePassword,
   refreshToken,
+  logout,
 };

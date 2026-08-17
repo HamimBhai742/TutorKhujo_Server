@@ -36,7 +36,7 @@ const registerUser = async (payload: IRegisterUser) => {
       Number(config.password_salt)
     );
 
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpCode = crypto.randomInt(100000, 999999).toString();
     const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
     const updatedUser = await prisma.user.update({
@@ -75,7 +75,7 @@ const registerUser = async (payload: IRegisterUser) => {
     Number(config.password_salt)
   );
 
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpCode = crypto.randomInt(100000, 999999).toString();
   const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
   const newUser = await prisma.user.create({
@@ -115,7 +115,7 @@ const loginUser = async (payload: ILoginUser) => {
     },
   });
 
-  if (!user) {
+  if (!user || user.deletedAt) {
     throw new AppError("User does not exist", 404);
   }
 
@@ -151,10 +151,23 @@ const loginUser = async (payload: ILoginUser) => {
     expiresIn: config.jwt.expire_in as SignOptions["expiresIn"],
   });
 
+  // Generate opaque refresh token and persist to DB
+  const rawRefreshToken = crypto.randomBytes(64).toString("hex");
+  const refreshTokenExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+  await prisma.refreshToken.create({
+    data: {
+      token: rawRefreshToken,
+      userId: user.id,
+      expiresAt: refreshTokenExpiry,
+    },
+  });
+
   const { password, otpCode, otpExpires, ...result } = user;
 
   return {
     accessToken,
+    refreshToken: rawRefreshToken,
     user: result,
   };
 };
@@ -183,11 +196,10 @@ const verifyOtp = async (email: string, otpCode: string) => {
   }
 
   const updatedUser = await prisma.user.update({
-    where: {
-      id: user.id,
-    },
+    where: { id: user.id },
     data: {
       isVerified: true,
+      isEmailVerified: true, // Mark email as separately verified
       otpCode: null,
       otpExpires: null,
     },
@@ -203,10 +215,18 @@ const verifyOtp = async (email: string, otpCode: string) => {
     expiresIn: config.jwt.expire_in as SignOptions["expiresIn"],
   });
 
+  // Generate refresh token on first verification
+  const rawRefreshToken = crypto.randomBytes(64).toString("hex");
+  const refreshTokenExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await prisma.refreshToken.create({
+    data: { token: rawRefreshToken, userId: updatedUser.id, expiresAt: refreshTokenExpiry },
+  });
+
   const { password, otpCode: oc, otpExpires: oe, ...result } = updatedUser;
 
   return {
     accessToken,
+    refreshToken: rawRefreshToken,
     user: result,
   };
 };
@@ -226,7 +246,7 @@ const resendOtp = async (email: string) => {
     throw new AppError("User is already verified", 400);
   }
 
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpCode = crypto.randomInt(100000, 999999).toString();
   const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
   await prisma.user.update({
@@ -290,44 +310,6 @@ const changePassword = async (
   return { message: "Password updated successfully" };
 };
 
-const refreshToken = async (token: string) => {
-  let decoded: JwtPayload & { id: string; email: string; role: string };
-  try {
-    decoded = jwt.verify(
-      token,
-      config.jwt.secret as Secret
-    ) as JwtPayload & { id: string; email: string; role: string };
-  } catch (err) {
-    throw new AppError("Invalid or expired refresh token", 401);
-  }
-
-  const user = await prisma.user.findUnique({
-    where: {
-      id: decoded.id,
-    },
-  });
-
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
-
-  if (user.status === "blocked" || user.status === "inactive") {
-    throw new AppError(`User account is ${user.status}`, 403);
-  }
-
-  const jwtPayload = {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-  };
-
-  const accessToken = jwt.sign(jwtPayload, config.jwt.secret as Secret, {
-    expiresIn: config.jwt.expire_in as SignOptions["expiresIn"],
-  });
-
-  return { accessToken };
-};
-
 
 
 const forgotPassword = async (payload: IForgotPassword) => {
@@ -341,7 +323,7 @@ const forgotPassword = async (payload: IForgotPassword) => {
     throw new AppError("User with this email does not exist", 404);
   }
 
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpCode = crypto.randomInt(100000, 999999).toString();
   const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
   await prisma.user.update({
@@ -474,7 +456,7 @@ const googleLogin = async (payload: { idToken: string; role?: "student" | "tutor
     if (!user.isVerified) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { isVerified: true },
+        data: { isVerified: true, isEmailVerified: true },
       });
     }
   } else {
@@ -483,6 +465,7 @@ const googleLogin = async (payload: { idToken: string; role?: "student" | "tutor
         email,
         name,
         isVerified: true,
+        isEmailVerified: true, // Google already verified the email
         role: payload.role || "student",
         password: null,
         mobile: null,
@@ -501,12 +484,73 @@ const googleLogin = async (payload: { idToken: string; role?: "student" | "tutor
     expiresIn: config.jwt.expire_in as SignOptions["expiresIn"],
   });
 
+  // Store refresh token in DB
+  const rawRefreshToken = crypto.randomBytes(64).toString("hex");
+  const refreshTokenExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await prisma.refreshToken.create({
+    data: { token: rawRefreshToken, userId: user.id, expiresAt: refreshTokenExpiry },
+  });
+
   const { password, otpCode, otpExpires, ...result } = user;
 
   return {
     accessToken,
+    refreshToken: rawRefreshToken,
     user: result,
   };
+};
+
+/**
+ * Refresh Token — issues a new accessToken using a valid DB-stored refreshToken.
+ * The token is validated against the DB (not just JWT signature) for true revocability.
+ */
+const refreshToken = async (token: string) => {
+  if (!token) {
+    throw new AppError("Refresh token is required", 400);
+  }
+
+  const storedToken = await prisma.refreshToken.findUnique({
+    where: { token },
+    include: { user: { select: { id: true, email: true, role: true, status: true } } },
+  });
+
+  if (!storedToken) {
+    throw new AppError("Invalid refresh token", 401);
+  }
+
+  if (new Date() > storedToken.expiresAt) {
+    // Delete expired token
+    await prisma.refreshToken.delete({ where: { id: storedToken.id } });
+    throw new AppError("Refresh token expired. Please log in again.", 401);
+  }
+
+  if (storedToken.user.status === "blocked" || storedToken.user.status === "inactive") {
+    throw new AppError(`Account is ${storedToken.user.status}`, 403);
+  }
+
+  const jwtPayload = {
+    id: storedToken.user.id,
+    email: storedToken.user.email,
+    role: storedToken.user.role,
+  };
+
+  const newAccessToken = jwt.sign(jwtPayload, config.jwt.secret as Secret, {
+    expiresIn: config.jwt.expire_in as SignOptions["expiresIn"],
+  });
+
+  return { accessToken: newAccessToken };
+};
+
+/**
+ * Revoke a specific refresh token (called on logout).
+ * Silently ignores if token doesn't exist (idempotent).
+ */
+const revokeRefreshToken = async (token: string) => {
+  try {
+    await prisma.refreshToken.delete({ where: { token } });
+  } catch {
+    // Token not found — already revoked or expired, ignore
+  }
 };
 
 export const AuthService = {
@@ -520,4 +564,5 @@ export const AuthService = {
   resetPassword,
   changePassword,
   refreshToken,
+  revokeRefreshToken,
 };

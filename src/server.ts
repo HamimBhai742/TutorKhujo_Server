@@ -9,10 +9,10 @@ import "./app/workers/email.worker";
 let server: HttpServer;
 const port = config.port;
 
-const main = () => {
+const main = async () => {
   server = createServer(app);
 
-  initSocket(server);
+  await initSocket(server);
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);

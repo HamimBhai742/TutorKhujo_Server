@@ -1,7 +1,16 @@
 import { prisma } from "../../lib/prisma";
 import { getIO } from "../../lib/socket";
+import { AppError } from "../../error/AppError";
 
-const createConversation = async (studentId: string, tutorId: string) => {
+const createConversation = async (
+  requesterId: string,
+  requesterRole: "student" | "tutor",
+  otherUserId: string
+) => {
+  // Determine studentId / tutorId based on who is making the request
+  const studentId = requesterRole === "student" ? requesterId : otherUserId;
+  const tutorId = requesterRole === "tutor" ? requesterId : otherUserId;
+
   let conversation = await prisma.conversation.findFirst({
     where: {
       OR: [
@@ -50,30 +59,43 @@ const getMyConversations = async (userId: string) => {
     orderBy: { updatedAt: "desc" },
   });
 
-  return conversations.map((c) => {
-    const isStudent = c.studentId === userId;
-    const counterParty = isStudent ? c.tutor : c.student;
-    const lastMsg = c.messages[0];
+  // Calculate unread counts in parallel
+  const results = await Promise.all(
+    conversations.map(async (c) => {
+      const isStudent = c.studentId === userId;
+      const counterParty = isStudent ? c.tutor : c.student;
+      const lastMsg = c.messages[0];
 
-    const bgColors = [
-      "bg-emerald-600",
-      "bg-rose-600",
-      "bg-indigo-600",
-      "bg-amber-600",
-      "bg-blue-600",
-      "bg-teal-600",
-    ];
-    const colorIdx = (counterParty?.name || "").charCodeAt(0) % bgColors.length;
+      const unreadCount = await prisma.message.count({
+        where: {
+          conversationId: c.id,
+          senderId: { not: userId },
+          isRead: false,
+        },
+      });
 
-    return {
-      id: c.id,
-      studentName: counterParty?.name || "User",
-      avatarBg: counterParty?.profilePic || bgColors[colorIdx],
-      lastMessage: lastMsg?.content || "No messages yet",
-      time: lastMsg ? new Date(lastMsg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "New",
-      unreadCount: 0,
-    };
-  });
+      const bgColors = [
+        "bg-emerald-600",
+        "bg-rose-600",
+        "bg-indigo-600",
+        "bg-amber-600",
+        "bg-blue-600",
+        "bg-teal-600",
+      ];
+      const colorIdx = (counterParty?.name || "").charCodeAt(0) % bgColors.length;
+
+      return {
+        id: c.id,
+        studentName: counterParty?.name || "User",
+        avatarBg: counterParty?.profilePic || bgColors[colorIdx],
+        lastMessage: lastMsg?.content || "No messages yet",
+        time: lastMsg ? new Date(lastMsg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "New",
+        unreadCount,
+      };
+    })
+  );
+
+  return results;
 };
 
 const sendMessage = async (senderId: string, conversationId: string, content: string) => {
@@ -82,6 +104,7 @@ const sendMessage = async (senderId: string, conversationId: string, content: st
       conversationId,
       senderId,
       content,
+      isRead: false,
     },
   });
 
@@ -115,14 +138,33 @@ const sendMessage = async (senderId: string, conversationId: string, content: st
   return message;
 };
 
-const getMessages = async (conversationId: string) => {
+/**
+ * Gets messages for a conversation and marks unread messages from other user as read.
+ * Security: verifies the requesting userId is a participant before returning any data.
+ */
+const getMessages = async (conversationId: string, requestingUserId: string) => {
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
   });
 
   if (!conversation) {
-    throw new Error("Conversation not found");
+    throw new AppError("Conversation not found", 404);
   }
+
+  // Authorization check — only participants can read messages
+  if (conversation.studentId !== requestingUserId && conversation.tutorId !== requestingUserId) {
+    throw new AppError("You are not authorized to view this conversation", 403);
+  }
+
+  // Mark all unread messages sent by the counterparty in this conversation as read
+  await prisma.message.updateMany({
+    where: {
+      conversationId,
+      senderId: { not: requestingUserId },
+      isRead: false,
+    },
+    data: { isRead: true },
+  });
 
   const messages = await prisma.message.findMany({
     where: { conversationId },

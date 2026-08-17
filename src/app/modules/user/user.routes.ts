@@ -15,6 +15,24 @@ router.patch(
   UserController.updateMe
 );
 
+router.patch(
+  "/me/onboard",
+  auth("tutor", "admin"),
+  validateRequest(UserValidation.onboardTutorValidationSchema),
+  UserController.onboardTutor
+);
+
+router.get("/admin-stats", auth("admin"), UserController.getAdminStats);
+
+router.get("/verifications", auth("admin"), UserController.getPendingVerifications);
+
+router.patch(
+  "/:id/verify",
+  auth("admin"),
+  validateRequest(UserValidation.updateVerificationValidationSchema),
+  UserController.updateVerificationStatus
+);
+
 router.get("/", auth("admin"), UserController.getAllUsers);
 
 router.get("/:id", auth("admin"), UserController.getUserById);

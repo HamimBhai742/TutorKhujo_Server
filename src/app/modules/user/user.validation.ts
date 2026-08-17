@@ -16,7 +16,35 @@ const updateUserStatusValidationSchema = z.object({
   }),
 });
 
+const onboardTutorValidationSchema = z.object({
+  body: z.object({
+    fullName: z.string().optional(),
+    dob: z.string().optional(),
+    gender: z.string().optional(),
+    city: z.string().optional(),
+    bio: z.string().optional(),
+    qualifications: z.array(z.any()).optional(),
+    tuitionModes: z.array(z.string()).optional(),
+    subjects: z.array(z.string()).optional(),
+    expectedSalary: z.number().optional(),
+    availability: z.any().optional(),
+    totalYearsExp: z.string().optional(),
+    experiences: z.array(z.any()).optional(),
+    profilePic: z.string().optional(),
+    certificateUrl: z.string().optional(),
+    nidCardUrl: z.string().optional(),
+  }),
+});
+
+const updateVerificationValidationSchema = z.object({
+  body: z.object({
+    status: z.enum(["Approved", "Rejected"]),
+  }),
+});
+
 export const UserValidation = {
   updateProfileValidationSchema,
   updateUserStatusValidationSchema,
+  onboardTutorValidationSchema,
+  updateVerificationValidationSchema,
 };

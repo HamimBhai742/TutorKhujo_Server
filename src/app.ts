@@ -15,7 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use(cookieParser());
 
-const allowedOrigins = ["http://localhost:3000"];
+const allowedOrigins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"];
 
 app.use(
   cors({
@@ -26,7 +26,8 @@ app.use(
         allowedOrigins.includes(origin) ||
         origin.endsWith(".vercel.app") ||
         (process.env.NODE_ENV !== "production" &&
-          (origin.includes(".ngrok-free.dev") ||
+          (origin.includes("localhost:") ||
+            origin.includes(".ngrok-free.dev") ||
             origin.startsWith("http://10.") ||
             origin.startsWith("http://192.168.")));
 

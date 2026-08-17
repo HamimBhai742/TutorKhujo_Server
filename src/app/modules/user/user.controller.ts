@@ -74,9 +74,60 @@ const deleteUser = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const onboardTutor = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const result = await UserService.onboardTutor(user.id, req.body);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Tutor profile onboarding details updated successfully",
+    data: result,
+  });
+});
+
+const getAdminStats = catchAsync(async (req: Request, res: Response) => {
+  const result = await UserService.getAdminStats();
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Admin statistics retrieved successfully",
+    data: result,
+  });
+});
+
+const getPendingVerifications = catchAsync(async (req: Request, res: Response) => {
+  const result = await UserService.getPendingVerifications();
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Pending tutor verifications retrieved successfully",
+    data: result,
+  });
+});
+
+const updateVerificationStatus = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const result = await UserService.updateVerificationStatus(id, status);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: `Tutor verification status updated to ${status}`,
+    data: result,
+  });
+});
+
 export const UserController = {
   getMe,
   updateMe,
+  onboardTutor,
+  getAdminStats,
+  getPendingVerifications,
+  updateVerificationStatus,
   getAllUsers,
   getUserById,
   updateUserStatus,

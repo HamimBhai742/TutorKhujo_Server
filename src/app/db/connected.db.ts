@@ -42,11 +42,72 @@ const seedAdmin = async () => {
   }
 };
 
+const seedTransactions = async () => {
+  try {
+    const transactionCount = await prisma.transaction.count();
+    if (transactionCount === 0) {
+      const students = await prisma.user.findMany({ where: { role: "student" } });
+      const tutors = await prisma.user.findMany({ where: { role: "tutor" } });
+
+      if (students.length > 0) {
+        await prisma.transaction.createMany({
+          data: [
+            {
+              userId: students[0].id,
+              amount: 5000,
+              type: "Invoice_Payment",
+              status: "Success",
+              method: "bKash",
+              reference: "BK-TXN-982341",
+            },
+            {
+              userId: students[0].id,
+              amount: 8000,
+              type: "Invoice_Payment",
+              status: "Failed",
+              method: "Card",
+              reference: "CRD-TXN-55412",
+            },
+          ],
+        });
+      }
+
+      if (tutors.length > 0) {
+        await prisma.transaction.createMany({
+          data: [
+            {
+              userId: tutors[0].id,
+              amount: 4500,
+              type: "Tutor_Payout",
+              status: "Success",
+              method: "Bank Transfer",
+              reference: "DBBL-OUT-10023",
+            },
+            {
+              userId: tutors[0].id,
+              amount: 5000,
+              type: "Tutor_Payout",
+              status: "Pending",
+              method: "bKash",
+              reference: "BK-PAY-771239",
+            },
+          ],
+        });
+      }
+
+      console.log("💳 Transactions seeded successfully!");
+    }
+  } catch (error: any) {
+    console.error("❌ Failed to seed Transactions:", error.message || error);
+  }
+};
+
 export const connectedDB = async () => {
   try {
     await prisma.$connect();
     console.log("Database connected successfully");
     await seedAdmin();
+    await seedTransactions();
     await connectRedis();
     initEmailWorker();
   } catch (error) {

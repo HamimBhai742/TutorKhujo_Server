@@ -25,6 +25,24 @@ model User {
   resetPasswordTokenExpires  DateTime?
   tuitionPosts               TuitionPost[]
   applications               TuitionApplication[] @relation("TutorApplications")
+  bio                        String?
+  profilePic                 String?
+  dob                        String?
+  gender                     String?
+  city                       String?
+  institution                String?
+  department                 String?
+  yearOfStudy                String?
+  subjects                   String[]  @default([])
+  tuitionModes               String[]  @default([])
+  expectedSalary             Int?
+  availability               Json?
+  totalYearsExp              String?
+  experiences                Json?
+  certificateUrl             String?
+  nidCardUrl                 String?
+  verificationStatus         VerificationStatus @default(None)
+  transactions               Transaction[]
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 }
@@ -97,4 +115,46 @@ enum ApplicationStatus {
   Shortlisted
   Hired
   Rejected
+}
+
+model Transaction {
+  id         String            @id @default(uuid())
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount     Int
+  type       TransactionType
+  status     TransactionStatus @default(Pending)
+  method     String
+  reference  String            @unique
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([userId])
+}
+
+model AdminSettings {
+  id                 String   @id @default("singleton")
+  platformFeePercent Int      @default(10)
+  maintenanceMode    Boolean  @default(false)
+  supportEmail       String   @default("support@tutorkhujo.com")
+  smsGatewayActive   Boolean  @default(true)
+  autoApproveTutors  Boolean  @default(false)
+}
+
+enum VerificationStatus {
+  None
+  Pending
+  Approved
+  Rejected
+}
+
+enum TransactionType {
+  Invoice_Payment
+  Tutor_Payout
+}
+
+enum TransactionStatus {
+  Pending
+  Success
+  Failed
 }

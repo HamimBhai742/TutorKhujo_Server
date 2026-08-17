@@ -1,5 +1,5 @@
 import { prisma } from "../../lib/prisma";
-import { getIO } from "../../lib/socket";
+import { getIO, isUserOnline } from "../../lib/socket";
 import { AppError } from "../../error/AppError";
 import { NotificationService } from "../notification/notification.service";
 
@@ -154,14 +154,16 @@ const sendMessage = async (senderId: string, conversationId: string, content: st
     console.error("Socket emit failed:", err);
   }
 
-  // Send in-app & push notification to the receiver
-  NotificationService.sendNotification({
-    userId: recipientId,
-    title: `💬 New message from ${senderName}`,
-    message: content.length > 80 ? content.slice(0, 77) + "..." : content,
-    type: "MESSAGE",
-    link: `/dashboard?tab=messages`,
-  }).catch((err) => console.error("[Message] Failed to notify recipient of new message:", err));
+  // Send in-app notification ONLY IF the recipient is offline
+  if (!isUserOnline(recipientId)) {
+    NotificationService.sendNotification({
+      userId: recipientId,
+      title: `💬 New message from ${senderName}`,
+      message: content.length > 80 ? content.slice(0, 77) + "..." : content,
+      type: "MESSAGE",
+      link: `/dashboard?tab=messages`,
+    }).catch((err) => console.error("[Message] Failed to notify offline recipient of new message:", err));
+  }
 
   return message;
 };

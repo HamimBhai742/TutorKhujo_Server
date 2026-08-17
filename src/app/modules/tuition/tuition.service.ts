@@ -329,9 +329,11 @@ const applyForTuition = async (
     throw new AppError("Only registered tutors can apply for tuition posts", 403);
   }
 
-  if (tutor.verificationStatus !== "Approved") {
+  if (tutor.verificationStatus !== "Approved" && !tutor.isVerified) {
     throw new AppError(
-      "Your tutor profile is currently pending verification. An admin must approve your profile documents before you can submit tuition applications.",
+      tutor.verificationStatus === "Pending"
+        ? "Your tutor profile is currently pending verification. An admin must approve your profile documents before you can submit tuition applications."
+        : "Please complete your tutor profile verification and submit required documents before applying for tuition posts.",
       403
     );
   }

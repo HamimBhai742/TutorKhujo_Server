@@ -5,13 +5,33 @@ import { MessageService } from "./message.service";
 
 const createConversation = catchAsync(async (req: Request, res: Response) => {
   const user = req.user!;
-  const { otherUserId } = req.body;
+  const { otherUserId, tutorId, studentId, receiverId, recipientId } = req.body;
 
-  // Use the authenticated user's ID as one participant — prevents creating fake conversations
+  // Resolve target user ID regardless of how the frontend sends it
+  let targetUserId = otherUserId || receiverId || recipientId;
+  if (!targetUserId) {
+    if (user.role === "student") {
+      targetUserId = tutorId;
+    } else if (user.role === "tutor") {
+      targetUserId = studentId;
+    } else {
+      targetUserId = tutorId || studentId;
+    }
+  }
+
+  if (!targetUserId) {
+    return sendResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: "Target user ID is required to start a conversation",
+      data: null,
+    });
+  }
+
   const result = await MessageService.createConversation(
     user.id,
     user.role as "student" | "tutor",
-    otherUserId
+    targetUserId
   );
 
   sendResponse(res, {

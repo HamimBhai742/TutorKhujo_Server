@@ -144,9 +144,14 @@ const updateUserStatus = async (
     throw new AppError("User not found", 404);
   }
 
+  const updateData: any = { ...payload };
+  if (payload.isVerified !== undefined) {
+    updateData.verificationStatus = payload.isVerified ? "Approved" : "None";
+  }
+
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: payload,
+    data: updateData,
     select: {
       id: true,
       name: true,
@@ -156,6 +161,7 @@ const updateUserStatus = async (
       mobile: true,
       isVerified: true,
       isFirstLogin: true,
+      verificationStatus: true,
       createdAt: true,
       updatedAt: true,
     },

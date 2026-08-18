@@ -20,6 +20,7 @@ const userSelectFields = {
   institution: true,
   department: true,
   yearOfStudy: true,
+  qualifications: true,
   subjects: true,
   tuitionModes: true,
   expectedSalary: true,
@@ -55,9 +56,32 @@ const updateMe = async (userId: string, payload: IUpdateProfile) => {
     throw new AppError("User not found", 404);
   }
 
+  const { fullName, salary, expectedSalary, qualifications, ...rest } = payload as any;
+
+  const updateData: any = { ...rest };
+
+  if (fullName) {
+    updateData.name = fullName;
+  }
+  if (salary !== undefined && salary !== null && !isNaN(Number(salary))) {
+    updateData.expectedSalary = Number(salary);
+  } else if (expectedSalary !== undefined && expectedSalary !== null && !isNaN(Number(expectedSalary))) {
+    updateData.expectedSalary = Number(expectedSalary);
+  }
+
+  if (qualifications !== undefined) {
+    updateData.qualifications = qualifications;
+    if (Array.isArray(qualifications) && qualifications.length > 0) {
+      const primary = qualifications[0];
+      if (primary?.institution) updateData.institution = primary.institution;
+      if (primary?.subject) updateData.department = primary.subject;
+      if (primary?.level) updateData.yearOfStudy = primary.level;
+    }
+  }
+
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: payload,
+    data: updateData,
     select: userSelectFields,
   });
 
@@ -121,18 +145,7 @@ const getAllUsers = async (query: {
 const getUserById = async (userId: string) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      mobile: true,
-      isVerified: true,
-      isFirstLogin: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: userSelectFields,
   });
 
   if (!user) {
@@ -162,19 +175,7 @@ const updateUserStatus = async (
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: updateData,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      mobile: true,
-      isVerified: true,
-      isFirstLogin: true,
-      verificationStatus: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: userSelectFields,
   });
 
   return updatedUser;
@@ -208,11 +209,14 @@ const onboardTutor = async (userId: string, payload: any) => {
     updateData.expectedSalary = Number(expectedSalary);
   }
 
-  if (Array.isArray(qualifications) && qualifications.length > 0) {
-    const primary = qualifications[0];
-    if (primary?.institution) updateData.institution = primary.institution;
-    if (primary?.subject) updateData.department = primary.subject;
-    if (primary?.level) updateData.yearOfStudy = primary.level;
+  if (qualifications !== undefined) {
+    updateData.qualifications = qualifications;
+    if (Array.isArray(qualifications) && qualifications.length > 0) {
+      const primary = qualifications[0];
+      if (primary?.institution) updateData.institution = primary.institution;
+      if (primary?.subject) updateData.department = primary.subject;
+      if (primary?.level) updateData.yearOfStudy = primary.level;
+    }
   }
 
   const updatedUser = await prisma.user.update({

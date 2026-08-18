@@ -3,6 +3,7 @@ import { z } from "zod";
 const updateProfileValidationSchema = z.object({
   body: z.object({
     name: z.string().optional(),
+    fullName: z.string().optional(),
     mobile: z.string().optional(),
     dob: z.string().optional(),
     gender: z.string().optional(),
@@ -12,8 +13,10 @@ const updateProfileValidationSchema = z.object({
     institution: z.string().optional(),
     department: z.string().optional(),
     yearOfStudy: z.string().optional(),
+    qualifications: z.array(z.any()).optional(),
     subjects: z.array(z.string()).optional(),
     tuitionModes: z.array(z.string()).optional(),
+    salary: z.number().optional(),
     expectedSalary: z.number().optional(),
     availability: z.any().optional(),
     totalYearsExp: z.string().optional(),
@@ -35,6 +38,7 @@ const updateUserStatusValidationSchema = z.object({
 
 const onboardTutorValidationSchema = z.object({
   body: z.object({
+    name: z.string().optional(),
     fullName: z.string().optional(),
     dob: z.string().optional(),
     gender: z.string().optional(),

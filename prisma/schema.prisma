@@ -284,3 +284,37 @@ model Review {
   @@index([tutorId])
   @@index([studentId])
 }
+
+model ClassLog {
+  id            String   @id @default(uuid())
+  tuitionId     String
+  tutorId       String
+  date          String   // e.g. "2026-08-18"
+  durationHours Float    @default(1.5)
+  topicsCovered String
+  status        String   @default("Completed") // "Completed", "Cancelled", "Rescheduled"
+  createdAt     DateTime @default(now())
+
+  @@index([tuitionId])
+  @@index([tutorId])
+}
+
+model TuitionPayment {
+  id            String    @id @default(uuid())
+  tuitionId     String
+  tutorId       String
+  studentId     String
+  studentName   String
+  subject       String
+  classLevel    String
+  month         String    // e.g. "August 2026"
+  amount        Int
+  status        String    @default("Pending") // "Paid", "Pending"
+  paymentMethod String?   // "Cash", "bKash", "Nagad", "Bank Transfer"
+  paidAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([tuitionId])
+  @@index([tutorId])
+  @@index([studentId])
+}

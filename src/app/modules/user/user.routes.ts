@@ -4,7 +4,17 @@ import { validateRequest } from "../../middleware/validateRequest";
 import { UserController } from "./user.controller";
 import { UserValidation } from "./user.validation";
 
+import { upload } from "../../utils/fileUpload";
+
 const router = Router();
+
+// File & Photo Upload Endpoint
+router.post(
+  "/upload",
+  auth("student", "tutor", "admin"),
+  upload.single("file"),
+  UserController.uploadFile
+);
 
 // Public: Get all tutors with optional filters
 router.get("/tutors", UserController.getAllPublicTutors);

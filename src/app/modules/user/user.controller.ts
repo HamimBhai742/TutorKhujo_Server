@@ -150,10 +150,37 @@ const getPublicTutorById = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const uploadFile = catchAsync(async (req: Request, res: Response) => {
+  if (!req.file) {
+    return sendResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: "No file was uploaded",
+      data: null,
+    });
+  }
+
+  const serverBaseUrl = process.env.SERVER_BASE_URL || `${req.protocol}://${req.get("host")}`;
+  const fileUrl = `${serverBaseUrl}/uploads/${req.file.filename}`;
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "File uploaded successfully",
+    data: {
+      url: fileUrl,
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+    },
+  });
+});
+
 export const UserController = {
   getMe,
   updateMe,
   onboardTutor,
+  uploadFile,
   getAdminStats,
   getPendingVerifications,
   updateVerificationStatus,

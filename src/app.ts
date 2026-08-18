@@ -26,10 +26,10 @@ const morganFormat = process.env.NODE_ENV === "production" ? "combined" : "dev";
 app.use(morgan(morganFormat));
 
 // ==============================================================
-// Body Parsers — with 10kb size limit to prevent DoS
+// Body Parsers — supporting base64 profile photos & document uploads
 // ==============================================================
-app.use(express.json({ limit: "10kb" }));
-app.use(express.urlencoded({ extended: true, limit: "10kb" }));
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use(cookieParser());
 

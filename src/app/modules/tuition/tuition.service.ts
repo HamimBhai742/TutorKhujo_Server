@@ -3,6 +3,7 @@ import { AppError } from "../../error/AppError";
 import { prisma } from "../../lib/prisma";
 import { NotificationService } from "../notification/notification.service";
 import { sendEmail } from "../../utils/sendEmail";
+import { getIO } from "../../lib/socket";
 import {
   ICreateApplication,
   ICreateTuitionPost,
@@ -666,6 +667,33 @@ const applyForTuition = async (
     type: "NEW_APPLICATION",
     link: "/dashboard?tab=applications",
   }).catch((err) => console.error("[Notification] Failed to notify student of new application:", err));
+
+  // Emit real-time Socket event to student
+  try {
+    const io = getIO();
+    if (io) {
+      io.to(post.studentId).emit("new_application", {
+        id: result.id,
+        postId: result.tuitionPostId,
+        tutorId: result.tutorId,
+        tutorName: result.tutor?.name || tutor.name || "Tutor",
+        institution: result.tutor?.institution || tutor.institution || "Verified Tutor",
+        subject: (post.subjects && post.subjects.join(", ")) || post.classLevel || "Tuition",
+        rating: 5.0,
+        salaryBid: result.salaryBid,
+        location: post.location || "Dhaka",
+        appliedDate: new Date(result.createdAt).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+        status: result.status || "Pending",
+      });
+    }
+  } catch (err) {
+    console.error("[Socket] Error emitting new_application:", err);
+  }
 
   // Send Email notification to student
   if (post.student?.email) {

@@ -6,6 +6,12 @@ import { UserValidation } from "./user.validation";
 
 const router = Router();
 
+// Public: Get all tutors with optional filters
+router.get("/tutors", UserController.getAllPublicTutors);
+
+// Public: Get single tutor by ID
+router.get("/tutors/:id", UserController.getPublicTutorById);
+
 router.get("/me", auth("student", "tutor", "admin"), UserController.getMe);
 
 router.patch(

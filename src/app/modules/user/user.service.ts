@@ -408,6 +408,141 @@ const deleteUser = async (userId: string) => {
   return { message: "User deleted successfully" };
 };
 
+const getAllPublicTutors = async (query?: { search?: string; subject?: string; location?: string }) => {
+  const where: any = {
+    role: "tutor",
+    status: "active",
+    deletedAt: null,
+  };
+
+  if (query?.search) {
+    where.OR = [
+      { name: { contains: query.search, mode: "insensitive" } },
+      { institution: { contains: query.search, mode: "insensitive" } },
+      { department: { contains: query.search, mode: "insensitive" } },
+      { city: { contains: query.search, mode: "insensitive" } },
+    ];
+  }
+
+  if (query?.location && query.location !== "Dhaka" && query.location !== "All") {
+    where.city = { contains: query.location, mode: "insensitive" };
+  }
+
+  if (query?.subject) {
+    where.subjects = { has: query.subject };
+  }
+
+  const tutors = await prisma.user.findMany({
+    where,
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      gender: true,
+      city: true,
+      bio: true,
+      profilePic: true,
+      institution: true,
+      department: true,
+      yearOfStudy: true,
+      qualifications: true,
+      subjects: true,
+      tuitionModes: true,
+      expectedSalary: true,
+      availability: true,
+      totalYearsExp: true,
+      experiences: true,
+      curriculums: true,
+      specializations: true,
+      verificationStatus: true,
+      isVerified: true,
+      isPriorityListed: true,
+      isTutorOfTheMonth: true,
+      reviewsReceived: {
+        select: {
+          id: true,
+          rating: true,
+          comment: true,
+          createdAt: true,
+          student: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+      createdAt: true,
+    },
+    orderBy: [
+      { isTutorOfTheMonth: "desc" },
+      { isPriorityListed: "desc" },
+      { verificationStatus: "desc" },
+      { createdAt: "desc" },
+    ],
+  });
+
+  return tutors;
+};
+
+const getPublicTutorById = async (id: string) => {
+  const tutor = await prisma.user.findFirst({
+    where: {
+      id,
+      role: "tutor",
+      status: "active",
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      gender: true,
+      city: true,
+      bio: true,
+      profilePic: true,
+      institution: true,
+      department: true,
+      yearOfStudy: true,
+      qualifications: true,
+      subjects: true,
+      tuitionModes: true,
+      expectedSalary: true,
+      availability: true,
+      totalYearsExp: true,
+      experiences: true,
+      videoIntroUrl: true,
+      curriculums: true,
+      specializations: true,
+      verificationStatus: true,
+      isVerified: true,
+      isPriorityListed: true,
+      isTutorOfTheMonth: true,
+      reviewsReceived: {
+        select: {
+          id: true,
+          rating: true,
+          comment: true,
+          createdAt: true,
+          student: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+      createdAt: true,
+    },
+  });
+
+  if (!tutor) {
+    throw new AppError("Tutor not found", 404);
+  }
+
+  return tutor;
+};
+
 export const UserService = {
   getMe,
   updateMe,
@@ -417,6 +552,8 @@ export const UserService = {
   updateVerificationStatus,
   getAllUsers,
   getUserById,
+  getAllPublicTutors,
+  getPublicTutorById,
   updateUserStatus,
   deleteUser,
 };

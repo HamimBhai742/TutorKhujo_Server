@@ -127,6 +127,29 @@ const updateVerificationStatus = catchAsync(async (req: Request, res: Response) 
   });
 });
 
+const getAllPublicTutors = catchAsync(async (req: Request, res: Response) => {
+  const result = await UserService.getAllPublicTutors(req.query);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Tutors retrieved successfully",
+    data: result,
+  });
+});
+
+const getPublicTutorById = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const result = await UserService.getPublicTutorById(id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Tutor retrieved successfully",
+    data: result,
+  });
+});
+
 export const UserController = {
   getMe,
   updateMe,
@@ -136,6 +159,8 @@ export const UserController = {
   updateVerificationStatus,
   getAllUsers,
   getUserById,
+  getAllPublicTutors,
+  getPublicTutorById,
   updateUserStatus,
   deleteUser,
 };

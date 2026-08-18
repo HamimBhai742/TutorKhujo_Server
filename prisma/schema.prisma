@@ -58,6 +58,8 @@ model User {
   deviceTokens               DeviceToken[]
   refreshTokens              RefreshToken[]
   messageReactions           MessageReaction[]
+  reviewsReceived            Review[]  @relation("TutorReviews")
+  reviewsGiven               Review[]  @relation("StudentReviews")
   deletedAt                  DateTime?  // Soft delete — null means active
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
@@ -260,4 +262,20 @@ model DeviceToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model Review {
+  id                String   @id @default(uuid())
+  tutorId           String
+  tutor             User     @relation("TutorReviews", fields: [tutorId], references: [id], onDelete: Cascade)
+  studentId         String
+  student           User     @relation("StudentReviews", fields: [studentId], references: [id], onDelete: Cascade)
+  rating            Int      // 1 to 5
+  comment           String
+  isVerifiedTuition Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([tutorId])
+  @@index([studentId])
 }

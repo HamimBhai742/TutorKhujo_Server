@@ -34,6 +34,13 @@ router.get(
   TuitionController.getTutorAppliedPosts
 );
 
+// Protected: Get smart matched jobs for tutor
+router.get(
+  "/matched-jobs",
+  auth("tutor", "admin"),
+  TuitionController.getMatchedJobs
+);
+
 // Protected: Update application status (Shortlisted / Hired / Rejected)
 router.patch(
   "/applications/:applicationId/status",

@@ -150,37 +150,42 @@ const notifyMatchingTutors = async (tuitionPost: {
   classLevel: string;
 }) => {
   try {
-    // Cap at 100 matching tutors — prevents unbounded queries at scale.
-    // With 50,000+ tutors teaching Math, a sequential loop would crash the server.
+    const postLoc = tuitionPost.location.toLowerCase();
+    // Cap at 100 matching tutors
     const matchingTutors = await prisma.user.findMany({
       where: {
         role: "tutor",
         status: "active",
-        subjects: {
-          hasSome: tuitionPost.subjects,
-        },
+        OR: [
+          { subjects: { hasSome: tuitionPost.subjects } },
+          { city: { contains: postLoc, mode: "insensitive" } },
+        ],
       },
       select: {
         id: true,
+        city: true,
+        subjects: true,
       },
-      take: 100, // Hard cap — increase or use cursor pagination for larger batches
+      take: 100,
     });
 
-    console.log(`[Notification] Found ${matchingTutors.length} matching tutors for post ${tuitionPost.id} (capped at 100)`);
+    console.log(`[Notification] Found ${matchingTutors.length} matching tutors for post ${tuitionPost.id}`);
 
-    // Send notifications in PARALLEL — not sequential — for maximum throughput
     await Promise.all(
-      matchingTutors.map((tutor) =>
-        sendNotification({
+      matchingTutors.map((tutor) => {
+        const hasLocationMatch = tutor.city && postLoc.includes(tutor.city.toLowerCase());
+        const matchPercent = hasLocationMatch ? 95 : 85;
+
+        return sendNotification({
           userId: tutor.id,
-          title: "New Tuition Match! 🎓",
-          message: `A new ${tuitionPost.classLevel} tuition in ${tuitionPost.location} matches your subjects. Budget: ৳${tuitionPost.budget}/mo`,
+          title: `🎯 ${matchPercent}% Tuition Match in ${tuitionPost.location}!`,
+          message: `Class: ${tuitionPost.classLevel} • Subjects: ${tuitionPost.subjects.join(", ")} • Salary: ৳${tuitionPost.budget}/mo`,
           type: "TUITION_MATCH",
-          link: `/tuition-jobs`,
+          link: `/dashboard?tab=matched_jobs`,
         }).catch((err) =>
           console.error(`[Notification] Failed to notify tutor ${tutor.id}:`, err)
-        )
-      )
+        );
+      })
     );
   } catch (err) {
     console.error("Error in notifyMatchingTutors:", err);

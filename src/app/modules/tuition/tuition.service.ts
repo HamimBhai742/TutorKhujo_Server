@@ -884,6 +884,74 @@ const updateApplicationStatus = async (
   return result;
 };
 
+const getMatchedJobsForTutor = async (tutorId: string) => {
+  const tutor = await prisma.user.findUnique({
+    where: { id: tutorId },
+    select: {
+      id: true,
+      city: true,
+      subjects: true,
+      expectedSalary: true,
+      curriculums: true,
+    },
+  });
+
+  if (!tutor) {
+    throw new AppError("Tutor not found", 404);
+  }
+
+  const activePosts = await prisma.tuitionPost.findMany({
+    where: {
+      status: "Active",
+    },
+    include: {
+      student: {
+        select: {
+          id: true,
+          name: true,
+          profilePic: true,
+        },
+      },
+      applications: {
+        where: { tutorId },
+        select: { id: true, status: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  const matchedJobs = activePosts.map((post) => {
+    let score = 50;
+
+    const subjectOverlap = post.subjects.some((s) =>
+      tutor.subjects.some((ts) => ts.toLowerCase().includes(s.toLowerCase()))
+    );
+    if (subjectOverlap) score += 30;
+
+    if (tutor.city && post.location.toLowerCase().includes(tutor.city.toLowerCase())) {
+      score += 15;
+    }
+
+    if (tutor.expectedSalary && post.budget >= tutor.expectedSalary) {
+      score += 5;
+    }
+
+    const matchScore = Math.min(score, 98);
+    const hasApplied = post.applications.length > 0;
+
+    return {
+      ...post,
+      matchScore,
+      hasApplied,
+    };
+  });
+
+  matchedJobs.sort((a, b) => b.matchScore - a.matchScore);
+
+  return matchedJobs;
+};
+
 export const TuitionService = {
   createTuitionPost,
   getMyTuitionPosts,
@@ -897,4 +965,5 @@ export const TuitionService = {
   getMyReceivedApplications,
   getTutorAppliedPosts,
   updateApplicationStatus,
+  getMatchedJobsForTutor,
 };

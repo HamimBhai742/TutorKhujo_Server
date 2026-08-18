@@ -173,6 +173,18 @@ const updateApplicationStatus = catchAsync(async (req: Request, res: Response) =
   });
 });
 
+const getMatchedJobs = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const result = await TuitionService.getMatchedJobsForTutor(user.id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Smart matched tuition jobs retrieved successfully",
+    data: result,
+  });
+});
+
 export const TuitionController = {
   createTuitionPost,
   getMyTuitionPosts,
@@ -186,4 +198,5 @@ export const TuitionController = {
   getMyReceivedApplications,
   getTutorAppliedPosts,
   updateApplicationStatus,
+  getMatchedJobs,
 };

@@ -55,6 +55,7 @@ model User {
   rewardPoints               Int       @default(0)
   isPriorityListed           Boolean   @default(false)
   isTutorOfTheMonth          Boolean   @default(false)
+  isPhonePrivate             Boolean   @default(true)
   transactions               Transaction[]
   conversationsAsStudent     Conversation[] @relation("StudentConversations")
   conversationsAsTutor       Conversation[] @relation("TutorConversations")
@@ -315,6 +316,23 @@ model TuitionPayment {
   createdAt     DateTime  @default(now())
 
   @@index([tuitionId])
+  @@index([tutorId])
+  @@index([studentId])
+}
+
+model TrialBooking {
+  id          String   @id @default(uuid())
+  tutorId     String
+  studentId   String
+  studentName String
+  subject     String
+  classLevel  String
+  date        String   // e.g. "2026-08-20"
+  timeSlot    String   // e.g. "05:00 PM"
+  notes       String?
+  status      String   @default("Pending") // "Pending", "Confirmed", "Declined"
+  createdAt   DateTime @default(now())
+
   @@index([tutorId])
   @@index([studentId])
 }

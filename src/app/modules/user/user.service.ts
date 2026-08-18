@@ -41,6 +41,7 @@ const userSelectFields = {
   rewardPoints: true,
   isPriorityListed: true,
   isTutorOfTheMonth: true,
+  isPhonePrivate: true,
   createdAt: true,
   updatedAt: true,
 };

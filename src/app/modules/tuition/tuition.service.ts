@@ -137,28 +137,30 @@ const isInstitutionOrQualificationMatch = (
   return allTutorText.includes(req);
 };
 
-export const calculateTutorProfileCompleteness = (tutor: any): number => {
-  let score = 0;
-  // 1. Full Name (10%)
-  if (tutor.name && tutor.name.trim().length >= 3) score += 10;
-  // 2. Gender (10%)
-  if (tutor.gender && (tutor.gender === "Male" || tutor.gender === "Female")) score += 10;
-  // 3. City / Location (10%)
-  if (tutor.city && tutor.city.trim().length >= 2) score += 10;
-  // 4. Bio / About (10%)
-  if (tutor.bio && tutor.bio.trim().length >= 10) score += 10;
-  // 5. University / Institution (15%)
-  if (tutor.institution && tutor.institution.trim().length >= 2) score += 15;
-  // 6. Department / Field of Study (10%)
-  if (tutor.department && tutor.department.trim().length >= 2) score += 10;
-  // 7. Teaching Subjects (15%)
-  if (Array.isArray(tutor.subjects) && tutor.subjects.length > 0) score += 15;
-  // 8. Tuition Modes (10%)
-  if (Array.isArray(tutor.tuitionModes) && tutor.tuitionModes.length > 0) score += 10;
-  // 9. Total Experience (10%)
-  if (tutor.totalYearsExp && tutor.totalYearsExp.trim().length > 0) score += 10;
+export const getMissingMandatoryTutorProfileFields = (tutor: any): string[] => {
+  const missing: string[] = [];
 
-  return Math.min(100, score);
+  if (!tutor.name || tutor.name.trim().length < 3) missing.push("Full Name");
+  if (!tutor.gender || (tutor.gender !== "Male" && tutor.gender !== "Female")) missing.push("Gender");
+  if (!tutor.dob || !tutor.dob.trim()) missing.push("Date of Birth");
+  if (!tutor.city || tutor.city.trim().length < 2) missing.push("City / Location");
+  if (!tutor.bio || tutor.bio.trim().length < 10) missing.push("Bio");
+  if (!tutor.institution || tutor.institution.trim().length < 2) missing.push("University / Institution");
+  if (!tutor.department || tutor.department.trim().length < 2) missing.push("Department / Major");
+  if (!Array.isArray(tutor.qualifications) || tutor.qualifications.length === 0) missing.push("Educational Qualifications");
+  if (!Array.isArray(tutor.subjects) || tutor.subjects.length === 0) missing.push("Teaching Subjects");
+  if (!Array.isArray(tutor.tuitionModes) || tutor.tuitionModes.length === 0) missing.push("Tuition Modes");
+  if (tutor.expectedSalary === undefined || tutor.expectedSalary === null || Number(tutor.expectedSalary) <= 0) missing.push("Expected Minimum Salary");
+  if (!tutor.totalYearsExp || !tutor.totalYearsExp.trim()) missing.push("Teaching Experience");
+
+  return missing;
+};
+
+export const calculateTutorProfileCompleteness = (tutor: any): number => {
+  const totalMandatory = 12;
+  const missing = getMissingMandatoryTutorProfileFields(tutor);
+  const completed = totalMandatory - missing.length;
+  return Math.round((completed / totalMandatory) * 100);
 };
 
 const createTuitionPost = async (
@@ -516,11 +518,11 @@ const applyForTuition = async (
     throw new AppError("You cannot apply to your own tuition post", 400);
   }
 
-  // --- Profile Completeness Validation (Must be at least 80% Complete) ---
-  const completeness = calculateTutorProfileCompleteness(tutor);
-  if (completeness < 80) {
+  // --- Mandatory Profile Completeness Validation ---
+  const missingProfileFields = getMissingMandatoryTutorProfileFields(tutor);
+  if (missingProfileFields.length > 0) {
     throw new AppError(
-      `Your tutor profile is only ${completeness}% complete. You must complete at least 80% of your profile setup (including Gender, University, Department, and Teaching Subjects) before applying for tuition posts.`,
+      `Your tutor profile is incomplete. You must complete all mandatory profile details before applying for tuition posts. Missing required fields: ${missingProfileFields.join(", ")}.`,
       400
     );
   }

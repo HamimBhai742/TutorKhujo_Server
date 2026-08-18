@@ -50,6 +50,11 @@ model User {
   verificationStatus         VerificationStatus @default(None)
   verificationSubmittedAt    DateTime?
   verificationRejectionReason String?
+  referralCode               String?   @unique
+  referredById               String?
+  rewardPoints               Int       @default(0)
+  isPriorityListed           Boolean   @default(false)
+  isTutorOfTheMonth          Boolean   @default(false)
   transactions               Transaction[]
   conversationsAsStudent     Conversation[] @relation("StudentConversations")
   conversationsAsTutor       Conversation[] @relation("TutorConversations")

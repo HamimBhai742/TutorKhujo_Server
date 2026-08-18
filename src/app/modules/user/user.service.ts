@@ -2,6 +2,7 @@ import { AppError } from "../../error/AppError";
 import { prisma } from "../../lib/prisma";
 import { IUpdateProfile, IUpdateUserStatus } from "./user.interface";
 import { NotificationService } from "../notification/notification.service";
+import { calculateTutorProfileCompleteness } from "../tuition/tuition.service";
 
 const userSelectFields = {
   id: true,
@@ -36,18 +37,32 @@ const userSelectFields = {
   verificationStatus: true,
   verificationSubmittedAt: true,
   verificationRejectionReason: true,
+  referralCode: true,
+  rewardPoints: true,
+  isPriorityListed: true,
+  isTutorOfTheMonth: true,
   createdAt: true,
   updatedAt: true,
 };
 
 const getMe = async (userId: string) => {
-  const user = await prisma.user.findUnique({
+  let user = await prisma.user.findUnique({
     where: { id: userId },
     select: userSelectFields,
   });
 
   if (!user) {
     throw new AppError("User not found", 404);
+  }
+
+  // Generate referral code if missing
+  if (!user.referralCode) {
+    const code = `TK-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    user = await prisma.user.update({
+      where: { id: userId },
+      data: { referralCode: code },
+      select: userSelectFields,
+    });
   }
 
   return user;
@@ -91,6 +106,13 @@ const updateMe = async (userId: string, payload: IUpdateProfile) => {
       if (primary?.subject) updateData.department = primary.subject;
       if (primary?.level) updateData.yearOfStudy = primary.level;
     }
+  }
+
+  // Compute profile completeness to grant Priority Listed status
+  const tempUser = { ...user, ...updateData };
+  const completeness = calculateTutorProfileCompleteness(tempUser);
+  if (completeness >= 100) {
+    updateData.isPriorityListed = true;
   }
 
   const updatedUser = await prisma.user.update({

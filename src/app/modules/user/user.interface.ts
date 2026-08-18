@@ -20,6 +20,10 @@ export interface IUpdateProfile {
   experiences?: any;
   certificateUrl?: string;
   nidCardUrl?: string;
+  studentIdCardUrl?: string;
+  videoIntroUrl?: string;
+  curriculums?: string[];
+  specializations?: string[];
   isFirstLogin?: boolean;
 }
 

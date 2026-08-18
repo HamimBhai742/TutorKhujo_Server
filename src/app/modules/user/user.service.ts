@@ -29,7 +29,13 @@ const userSelectFields = {
   experiences: true,
   certificateUrl: true,
   nidCardUrl: true,
+  studentIdCardUrl: true,
+  videoIntroUrl: true,
+  curriculums: true,
+  specializations: true,
   verificationStatus: true,
+  verificationSubmittedAt: true,
+  verificationRejectionReason: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -67,6 +73,14 @@ const updateMe = async (userId: string, payload: IUpdateProfile) => {
     updateData.expectedSalary = Number(salary);
   } else if (expectedSalary !== undefined && expectedSalary !== null && !isNaN(Number(expectedSalary))) {
     updateData.expectedSalary = Number(expectedSalary);
+  }
+
+  // Auto-trigger verification review when identity documents are updated
+  if (updateData.nidCardUrl || updateData.studentIdCardUrl) {
+    if (user.verificationStatus === "None" || user.verificationStatus === "Rejected") {
+      updateData.verificationStatus = "Pending";
+      updateData.verificationSubmittedAt = new Date();
+    }
   }
 
   if (qualifications !== undefined) {

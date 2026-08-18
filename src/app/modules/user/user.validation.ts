@@ -23,6 +23,10 @@ const updateProfileValidationSchema = z.object({
     experiences: z.any().optional(),
     certificateUrl: z.string().optional(),
     nidCardUrl: z.string().optional(),
+    studentIdCardUrl: z.string().optional(),
+    videoIntroUrl: z.string().optional(),
+    curriculums: z.array(z.string()).optional(),
+    specializations: z.array(z.string()).optional(),
     role: z.enum(["student", "tutor"]).optional(),
     isFirstLogin: z.boolean().optional(),
   }),
@@ -55,6 +59,10 @@ const onboardTutorValidationSchema = z.object({
     profilePic: z.string().optional(),
     certificateUrl: z.string().optional(),
     nidCardUrl: z.string().optional(),
+    studentIdCardUrl: z.string().optional(),
+    videoIntroUrl: z.string().optional(),
+    curriculums: z.array(z.string()).optional(),
+    specializations: z.array(z.string()).optional(),
   }),
 });
 

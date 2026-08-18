@@ -43,7 +43,13 @@ model User {
   experiences                Json?
   certificateUrl             String?
   nidCardUrl                 String?
+  studentIdCardUrl           String?
+  videoIntroUrl              String?
+  curriculums                String[]  @default([])
+  specializations            String[]  @default([])
   verificationStatus         VerificationStatus @default(None)
+  verificationSubmittedAt    DateTime?
+  verificationRejectionReason String?
   transactions               Transaction[]
   conversationsAsStudent     Conversation[] @relation("StudentConversations")
   conversationsAsTutor       Conversation[] @relation("TutorConversations")

@@ -43,10 +43,13 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 expressjs
 
 # Copy production dependencies, compiled dist, and prisma schema
-COPY --from=builder /app/package*.json ./
+COPY --from=builder --chown=expressjs:nodejs /app/package*.json ./
 COPY --from=builder --chown=expressjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=expressjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=expressjs:nodejs /app/prisma ./prisma
+
+# Ensure uploads directory exists and is writable by expressjs
+RUN mkdir -p /app/uploads && chown -R expressjs:nodejs /app
 
 USER expressjs
 

@@ -1,17 +1,18 @@
 # ==========================================
 # STAGE 1: Dependencies Stage
 # ==========================================
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package*.json ./
+COPY prisma ./prisma/
 RUN npm ci
 
 # ==========================================
 # STAGE 2: Build Stage
 # ==========================================
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
@@ -30,7 +31,7 @@ RUN npm prune --omit=dev
 # ==========================================
 # STAGE 3: Production Runner Stage
 # ==========================================
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 

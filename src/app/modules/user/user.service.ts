@@ -5,6 +5,7 @@ import { NotificationService } from "../notification/notification.service";
 import { calculateTutorProfileCompleteness } from "../tuition/tuition.service";
 import { enqueueEmail } from "../../queues/email.queue";
 import { getTutorVerificationEmailTemplate } from "../../utils/templates/tutorVerification.template";
+import { getAccountRoleUpdateEmailTemplate, getAccountStatusUpdateEmailTemplate } from "../../utils/templates/accountStatus.template";
 
 const userSelectFields = {
   id: true,
@@ -276,6 +277,39 @@ const updateUserStatus = async (
     },
     select: userSelectFields,
   });
+
+  // Notify user if role is updated
+  if (payload.role !== undefined && payload.role !== user.role) {
+    NotificationService.sendNotification({
+      userId,
+      title: "Account Role Updated 🔄",
+      message: `Your account role has been updated to ${payload.role}.`,
+      type: "ROLE_UPDATE",
+      link: "/dashboard",
+    }).catch((err) => console.error("[Notification] Role update notification failed:", err));
+
+    const emailHtml = getAccountRoleUpdateEmailTemplate(user.name, payload.role);
+    enqueueEmail(user.email, "Account Role Updated 🔄", emailHtml)
+      .catch((err) => console.error("[Email] Role update email failed:", err));
+  }
+
+  // Notify user if status is updated
+  if (payload.status !== undefined && payload.status !== user.status) {
+    const isBlocked = payload.status === "blocked";
+    NotificationService.sendNotification({
+      userId,
+      title: isBlocked ? "Account Suspended ⚠️" : "Account Reactivated ✅",
+      message: isBlocked 
+        ? "Your account has been blocked/suspended. Please check your email for details."
+        : "Your account status has been restored. You can now use the platform normally.",
+      type: "STATUS_UPDATE",
+      link: "/dashboard",
+    }).catch((err) => console.error("[Notification] Status update notification failed:", err));
+
+    const emailHtml = getAccountStatusUpdateEmailTemplate(user.name, payload.status);
+    enqueueEmail(user.email, isBlocked ? "Account Suspended ⚠️" : "Account Reactivated", emailHtml)
+      .catch((err) => console.error("[Email] Status update email failed:", err));
+  }
 
   const { tutorProfile, ...userFields } = updatedUser as any;
   return {

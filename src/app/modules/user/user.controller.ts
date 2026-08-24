@@ -17,7 +17,14 @@ const getMe = catchAsync(async (req: Request, res: Response) => {
 
 const updateMe = catchAsync(async (req: Request, res: Response) => {
   const user = req.user!;
-  const result = await UserService.updateMe(user.id, req.body);
+  const payload = { ...req.body };
+
+  if (req.file) {
+    const serverBaseUrl = process.env.SERVER_BASE_URL || `${req.protocol}://${req.get("host")}`;
+    payload.profilePic = `${serverBaseUrl}/uploads/${req.file.filename}`;
+  }
+
+  const result = await UserService.updateMe(user.id, payload);
 
   sendResponse(res, {
     statusCode: 200,

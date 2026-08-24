@@ -4,6 +4,7 @@ import { validateRequest } from "../../middleware/validateRequest";
 import { UserController } from "./user.controller";
 import { UserValidation } from "./user.validation";
 
+import { AppError } from "../../error/AppError";
 import { upload } from "../../utils/fileUpload";
 
 const router = Router();
@@ -27,6 +28,17 @@ router.get("/me", auth("student", "tutor", "admin"), UserController.getMe);
 router.patch(
   "/me",
   auth("student", "tutor", "admin"),
+  upload.single("file"),
+  (req, res, next) => {
+    if (req.body.data) {
+      try {
+        req.body = JSON.parse(req.body.data);
+      } catch (err) {
+        return next(new AppError("Invalid JSON inside the 'data' field", 400));
+      }
+    }
+    next();
+  },
   validateRequest(UserValidation.updateProfileValidationSchema),
   UserController.updateMe
 );

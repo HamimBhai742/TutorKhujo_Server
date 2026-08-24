@@ -3,6 +3,8 @@ import { prisma } from "../../lib/prisma";
 import { IUpdateProfile, IUpdateUserStatus } from "./user.interface";
 import { NotificationService } from "../notification/notification.service";
 import { calculateTutorProfileCompleteness } from "../tuition/tuition.service";
+import { enqueueEmail } from "../../queues/email.queue";
+import { getTutorVerificationEmailTemplate } from "../../utils/templates/tutorVerification.template";
 
 const userSelectFields = {
   id: true,
@@ -18,32 +20,11 @@ const userSelectFields = {
   city: true,
   bio: true,
   profilePic: true,
-  institution: true,
-  department: true,
-  yearOfStudy: true,
-  qualifications: true,
-  subjects: true,
-  tuitionModes: true,
-  expectedSalary: true,
-  availability: true,
-  totalYearsExp: true,
-  experiences: true,
-  certificateUrl: true,
-  nidCardUrl: true,
-  studentIdCardUrl: true,
-  videoIntroUrl: true,
-  curriculums: true,
-  specializations: true,
-  verificationStatus: true,
-  verificationSubmittedAt: true,
-  verificationRejectionReason: true,
   referralCode: true,
   rewardPoints: true,
-  isPriorityListed: true,
-  isTutorOfTheMonth: true,
-  isPhonePrivate: true,
   createdAt: true,
   updatedAt: true,
+  tutorProfile: true,
 };
 
 const getMe = async (userId: string) => {
@@ -66,7 +47,11 @@ const getMe = async (userId: string) => {
     });
   }
 
-  return user;
+  const { tutorProfile, ...userFields } = user as any;
+  return {
+    ...userFields,
+    ...(tutorProfile || {}),
+  };
 };
 
 const updateMe = async (userId: string, payload: IUpdateProfile) => {
@@ -78,51 +63,101 @@ const updateMe = async (userId: string, payload: IUpdateProfile) => {
     throw new AppError("User not found", 404);
   }
 
-  const { fullName, salary, expectedSalary, qualifications, ...rest } = payload as any;
+  const {
+    name, fullName, mobile, dob, gender, city, bio, profilePic, isFirstLogin,
+    salary, expectedSalary, qualifications,
+    ...rest
+  } = payload as any;
 
-  const updateData: any = { ...rest };
+  const userUpdateData: any = {};
+  if (fullName) userUpdateData.name = fullName;
+  else if (name) userUpdateData.name = name;
 
-  if (fullName) {
-    updateData.name = fullName;
-  }
-  if (salary !== undefined && salary !== null && !isNaN(Number(salary))) {
-    updateData.expectedSalary = Number(salary);
-  } else if (expectedSalary !== undefined && expectedSalary !== null && !isNaN(Number(expectedSalary))) {
-    updateData.expectedSalary = Number(expectedSalary);
-  }
+  if (mobile !== undefined) userUpdateData.mobile = mobile;
+  if (dob !== undefined) userUpdateData.dob = dob;
+  if (gender !== undefined) userUpdateData.gender = gender;
+  if (city !== undefined) userUpdateData.city = city;
+  if (bio !== undefined) userUpdateData.bio = bio;
+  if (profilePic !== undefined) userUpdateData.profilePic = profilePic;
+  if (isFirstLogin !== undefined) userUpdateData.isFirstLogin = isFirstLogin;
 
-  // Auto-trigger verification review when identity documents are updated
-  if (updateData.nidCardUrl || updateData.studentIdCardUrl) {
-    if (user.verificationStatus === "None" || user.verificationStatus === "Rejected") {
-      updateData.verificationStatus = "Pending";
-      updateData.verificationSubmittedAt = new Date();
+  const tutorUpdateData: any = {};
+  
+  const tutorFieldsList = [
+    "subjects", "tuitionModes", "availability", "totalYearsExp", "experiences",
+    "certificateUrl", "nidCardUrl", "studentIdCardUrl", "videoIntroUrl", "curriculums",
+    "specializations", "verificationStatus", "verificationSubmittedAt", "verificationRejectionReason",
+    "isPriorityListed", "isTutorOfTheMonth", "isPhonePrivate"
+  ];
+
+  tutorFieldsList.forEach(field => {
+    if (rest[field] !== undefined) {
+      tutorUpdateData[field] = rest[field];
     }
+  });
+
+  if (salary !== undefined && salary !== null && !isNaN(Number(salary))) {
+    tutorUpdateData.expectedSalary = Number(salary);
+  } else if (expectedSalary !== undefined && expectedSalary !== null && !isNaN(Number(expectedSalary))) {
+    tutorUpdateData.expectedSalary = Number(expectedSalary);
   }
 
   if (qualifications !== undefined) {
-    updateData.qualifications = qualifications;
+    tutorUpdateData.qualifications = qualifications;
     if (Array.isArray(qualifications) && qualifications.length > 0) {
       const primary = qualifications[0];
-      if (primary?.institution) updateData.institution = primary.institution;
-      if (primary?.subject) updateData.department = primary.subject;
-      if (primary?.level) updateData.yearOfStudy = primary.level;
+      if (primary?.institution) tutorUpdateData.institution = primary.institution;
+      if (primary?.subject) tutorUpdateData.department = primary.subject;
+      if (primary?.level) tutorUpdateData.yearOfStudy = primary.level;
+    }
+  } else {
+    if (rest.institution !== undefined) tutorUpdateData.institution = rest.institution;
+    if (rest.department !== undefined) tutorUpdateData.department = rest.department;
+    if (rest.yearOfStudy !== undefined) tutorUpdateData.yearOfStudy = rest.yearOfStudy;
+  }
+
+  const existingProfile = await prisma.tutorProfile.findUnique({
+    where: { userId },
+  });
+
+  if (tutorUpdateData.nidCardUrl || tutorUpdateData.studentIdCardUrl) {
+    const currentStatus = existingProfile?.verificationStatus || "None";
+    if (currentStatus === "None" || currentStatus === "Rejected") {
+      tutorUpdateData.verificationStatus = "Pending";
+      tutorUpdateData.verificationSubmittedAt = new Date();
     }
   }
 
-  // Compute profile completeness to grant Priority Listed status
-  const tempUser = { ...user, ...updateData };
-  const completeness = calculateTutorProfileCompleteness(tempUser);
+  const tempTutor = {
+    ...user,
+    ...userUpdateData,
+    ...(existingProfile || {}),
+    ...tutorUpdateData
+  };
+  const completeness = calculateTutorProfileCompleteness(tempTutor);
   if (completeness >= 100) {
-    updateData.isPriorityListed = true;
+    tutorUpdateData.isPriorityListed = true;
   }
 
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: updateData,
+    data: {
+      ...userUpdateData,
+      tutorProfile: {
+        upsert: {
+          update: tutorUpdateData,
+          create: tutorUpdateData,
+        }
+      }
+    },
     select: userSelectFields,
   });
 
-  return updatedUser;
+  const { tutorProfile, ...userFields } = updatedUser as any;
+  return {
+    ...userFields,
+    ...(tutorProfile || {}),
+  };
 };
 
 const getAllUsers = async (query: {
@@ -159,7 +194,11 @@ const getAllUsers = async (query: {
         status: true,
         mobile: true,
         isVerified: true,
-        verificationStatus: true,
+        tutorProfile: {
+          select: {
+            verificationStatus: true,
+          }
+        },
         createdAt: true,
         updatedAt: true,
       },
@@ -168,8 +207,16 @@ const getAllUsers = async (query: {
     prisma.user.count({ where }),
   ]);
 
+  const mappedUsers = users.map(u => {
+    const { tutorProfile, ...userFields } = u;
+    return {
+      ...userFields,
+      verificationStatus: tutorProfile?.verificationStatus || "None",
+    };
+  });
+
   return {
-    data: users,
+    data: mappedUsers,
     meta: {
       total,
       page,
@@ -204,18 +251,37 @@ const updateUserStatus = async (
     throw new AppError("User not found", 404);
   }
 
-  const updateData: any = { ...payload };
+  const userUpdateData: any = {};
+  if (payload.status !== undefined) userUpdateData.status = payload.status;
+  if (payload.role !== undefined) userUpdateData.role = payload.role;
+  if (payload.isVerified !== undefined) userUpdateData.isVerified = payload.isVerified;
+
+  const tutorUpdateData: any = {};
   if (payload.isVerified !== undefined) {
-    updateData.verificationStatus = payload.isVerified ? "Approved" : "None";
+    tutorUpdateData.verificationStatus = payload.isVerified ? "Approved" : "None";
   }
 
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: updateData,
+    data: {
+      ...userUpdateData,
+      ...(payload.isVerified !== undefined ? {
+        tutorProfile: {
+          upsert: {
+            update: tutorUpdateData,
+            create: tutorUpdateData,
+          }
+        }
+      } : {})
+    },
     select: userSelectFields,
   });
 
-  return updatedUser;
+  const { tutorProfile, ...userFields } = updatedUser as any;
+  return {
+    ...userFields,
+    ...(tutorProfile || {}),
+  };
 };
 
 const onboardTutor = async (userId: string, payload: any) => {
@@ -229,40 +295,70 @@ const onboardTutor = async (userId: string, payload: any) => {
 
   const { fullName, salary, expectedSalary, qualifications, ...rest } = payload;
 
-  const updateData: any = {
-    ...rest,
+  const userUpdateData: any = {
     role: "tutor",
     isFirstLogin: false,
     isVerified: true,
+  };
+  if (fullName) {
+    userUpdateData.name = fullName;
+  }
+  ["mobile", "dob", "gender", "city", "bio", "profilePic"].forEach(field => {
+    if (rest[field] !== undefined) {
+      userUpdateData[field] = rest[field];
+    }
+  });
+
+  const tutorUpdateData: any = {
     verificationStatus: "Approved",
   };
 
-  if (fullName) {
-    updateData.name = fullName;
-  }
+  const tutorFieldsList = [
+    "subjects", "tuitionModes", "availability", "totalYearsExp", "experiences",
+    "certificateUrl", "nidCardUrl", "studentIdCardUrl", "videoIntroUrl", "curriculums",
+    "specializations", "isPhonePrivate"
+  ];
+  tutorFieldsList.forEach(field => {
+    if (rest[field] !== undefined) {
+      tutorUpdateData[field] = rest[field];
+    }
+  });
+
   if (salary !== undefined && salary !== null && !isNaN(Number(salary))) {
-    updateData.expectedSalary = Number(salary);
+    tutorUpdateData.expectedSalary = Number(salary);
   } else if (expectedSalary !== undefined && expectedSalary !== null && !isNaN(Number(expectedSalary))) {
-    updateData.expectedSalary = Number(expectedSalary);
+    tutorUpdateData.expectedSalary = Number(expectedSalary);
   }
 
   if (qualifications !== undefined) {
-    updateData.qualifications = qualifications;
+    tutorUpdateData.qualifications = qualifications;
     if (Array.isArray(qualifications) && qualifications.length > 0) {
       const primary = qualifications[0];
-      if (primary?.institution) updateData.institution = primary.institution;
-      if (primary?.subject) updateData.department = primary.subject;
-      if (primary?.level) updateData.yearOfStudy = primary.level;
+      if (primary?.institution) tutorUpdateData.institution = primary.institution;
+      if (primary?.subject) tutorUpdateData.department = primary.subject;
+      if (primary?.level) tutorUpdateData.yearOfStudy = primary.level;
     }
   }
 
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: updateData,
+    data: {
+      ...userUpdateData,
+      tutorProfile: {
+        upsert: {
+          update: tutorUpdateData,
+          create: tutorUpdateData,
+        }
+      }
+    },
     select: userSelectFields,
   });
 
-  return updatedUser;
+  const { tutorProfile, ...userFields } = updatedUser as any;
+  return {
+    ...userFields,
+    ...(tutorProfile || {}),
+  };
 };
 
 const getAdminStats = async () => {
@@ -277,7 +373,7 @@ const getAdminStats = async () => {
     prisma.user.count(),
     prisma.user.count({ where: { role: "tutor" } }),
     prisma.user.count({ where: { role: "student" } }),
-    prisma.user.count({ where: { verificationStatus: "Pending" } }),
+    prisma.user.count({ where: { role: "tutor", tutorProfile: { verificationStatus: "Pending" } } }),
     prisma.tuitionPost.count(),
     prisma.tuitionPost.count({ where: { status: "Active" } }),
   ]);
@@ -308,38 +404,47 @@ const getPendingVerifications = async () => {
     where: {
       role: "tutor",
       deletedAt: null,
-      verificationStatus: {
-        not: "None",
+      tutorProfile: {
+        verificationStatus: {
+          not: "None",
+        },
       },
     },
     select: {
       id: true,
       name: true,
       email: true,
-      institution: true,
-      department: true,
-      yearOfStudy: true,
-      subjects: true,
-      certificateUrl: true,
-      nidCardUrl: true,
-      verificationStatus: true,
       createdAt: true,
+      tutorProfile: {
+        select: {
+          institution: true,
+          department: true,
+          yearOfStudy: true,
+          subjects: true,
+          certificateUrl: true,
+          nidCardUrl: true,
+          verificationStatus: true,
+        }
+      }
     },
   });
 
-  return tutors.map((t) => ({
-    id: t.id,
-    tutorName: t.name,
-    email: t.email,
-    institution: t.institution || "N/A",
-    department: t.department || "N/A",
-    yearOfStudy: t.yearOfStudy || "N/A",
-    subjects: t.subjects,
-    certificateUrl: t.certificateUrl || "transcript.pdf",
-    nidCardUrl: t.nidCardUrl || "nid.jpg",
-    status: t.verificationStatus,
-    submissionDate: t.createdAt.toISOString().split("T")[0],
-  }));
+  return tutors.map((t) => {
+    const profile = t.tutorProfile;
+    return {
+      id: t.id,
+      tutorName: t.name,
+      email: t.email,
+      institution: profile?.institution || "N/A",
+      department: profile?.department || "N/A",
+      yearOfStudy: profile?.yearOfStudy || "N/A",
+      subjects: profile?.subjects || [],
+      certificateUrl: profile?.certificateUrl || "transcript.pdf",
+      nidCardUrl: profile?.nidCardUrl || "nid.jpg",
+      status: profile?.verificationStatus || "None",
+      submissionDate: t.createdAt.toISOString().split("T")[0],
+    };
+  });
 };
 
 const updateVerificationStatus = async (
@@ -357,9 +462,14 @@ const updateVerificationStatus = async (
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: {
-      verificationStatus: status,
       isVerified: status === "Approved" ? true : user.isVerified,
+      tutorProfile: {
+        update: {
+          verificationStatus: status,
+        }
+      }
     },
+    select: userSelectFields,
   });
 
   // Notify the tutor about their verification decision
@@ -384,7 +494,16 @@ const updateVerificationStatus = async (
     link: notifPayload.link,
   }).catch((err) => console.error("[Notification] Failed to notify tutor of verification status:", err));
 
-  return updatedUser;
+  // Enqueue verification email status update via BullMQ
+  const emailHtml = getTutorVerificationEmailTemplate(user.name, status);
+  enqueueEmail(user.email, status === "Approved" ? "Tutor Profile Verified! ✅" : "Tutor Verification Update", emailHtml)
+    .catch((err) => console.error("[Email] Failed to enqueue verification status email:", err));
+
+  const { tutorProfile, ...userFields } = updatedUser as any;
+  return {
+    ...userFields,
+    ...(tutorProfile || {}),
+  };
 };
 
 const deleteUser = async (userId: string) => {
@@ -418,9 +537,9 @@ const getAllPublicTutors = async (query?: { search?: string; subject?: string; l
   if (query?.search) {
     where.OR = [
       { name: { contains: query.search, mode: "insensitive" } },
-      { institution: { contains: query.search, mode: "insensitive" } },
-      { department: { contains: query.search, mode: "insensitive" } },
       { city: { contains: query.search, mode: "insensitive" } },
+      { tutorProfile: { institution: { contains: query.search, mode: "insensitive" } } },
+      { tutorProfile: { department: { contains: query.search, mode: "insensitive" } } },
     ];
   }
 
@@ -429,7 +548,10 @@ const getAllPublicTutors = async (query?: { search?: string; subject?: string; l
   }
 
   if (query?.subject) {
-    where.subjects = { has: query.subject };
+    where.tutorProfile = {
+      ...where.tutorProfile,
+      subjects: { has: query.subject }
+    };
   }
 
   const tutors = await prisma.user.findMany({
@@ -443,22 +565,8 @@ const getAllPublicTutors = async (query?: { search?: string; subject?: string; l
       city: true,
       bio: true,
       profilePic: true,
-      institution: true,
-      department: true,
-      yearOfStudy: true,
-      qualifications: true,
-      subjects: true,
-      tuitionModes: true,
-      expectedSalary: true,
-      availability: true,
-      totalYearsExp: true,
-      experiences: true,
-      curriculums: true,
-      specializations: true,
-      verificationStatus: true,
       isVerified: true,
-      isPriorityListed: true,
-      isTutorOfTheMonth: true,
+      tutorProfile: true,
       reviewsReceived: {
         select: {
           id: true,
@@ -475,14 +583,20 @@ const getAllPublicTutors = async (query?: { search?: string; subject?: string; l
       createdAt: true,
     },
     orderBy: [
-      { isTutorOfTheMonth: "desc" },
-      { isPriorityListed: "desc" },
-      { verificationStatus: "desc" },
+      { tutorProfile: { isTutorOfTheMonth: "desc" } },
+      { tutorProfile: { isPriorityListed: "desc" } },
+      { tutorProfile: { verificationStatus: "desc" } },
       { createdAt: "desc" },
     ],
   });
 
-  return tutors;
+  return tutors.map(t => {
+    const { tutorProfile, ...userFields } = t;
+    return {
+      ...userFields,
+      ...(tutorProfile || {}),
+    };
+  });
 };
 
 const getPublicTutorById = async (id: string) => {
@@ -502,23 +616,8 @@ const getPublicTutorById = async (id: string) => {
       city: true,
       bio: true,
       profilePic: true,
-      institution: true,
-      department: true,
-      yearOfStudy: true,
-      qualifications: true,
-      subjects: true,
-      tuitionModes: true,
-      expectedSalary: true,
-      availability: true,
-      totalYearsExp: true,
-      experiences: true,
-      videoIntroUrl: true,
-      curriculums: true,
-      specializations: true,
-      verificationStatus: true,
       isVerified: true,
-      isPriorityListed: true,
-      isTutorOfTheMonth: true,
+      tutorProfile: true,
       reviewsReceived: {
         select: {
           id: true,
@@ -540,7 +639,11 @@ const getPublicTutorById = async (id: string) => {
     throw new AppError("Tutor not found", 404);
   }
 
-  return tutor;
+  const { tutorProfile, ...userFields } = tutor;
+  return {
+    ...userFields,
+    ...(tutorProfile || {}),
+  };
 };
 
 export const UserService = {

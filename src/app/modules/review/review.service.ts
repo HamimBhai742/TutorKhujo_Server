@@ -84,9 +84,13 @@ const getTutorStats = async (tutorId: string) => {
     select: {
       id: true,
       name: true,
-      totalYearsExp: true,
       isVerified: true,
-      verificationStatus: true,
+      tutorProfile: {
+        select: {
+          totalYearsExp: true,
+          verificationStatus: true,
+        }
+      },
       applications: {
         select: {
           status: true,
@@ -104,12 +108,12 @@ const getTutorStats = async (tutorId: string) => {
     throw new AppError("Tutor not found", 404);
   }
 
-  const hiredCount = tutor.applications.filter((a) => a.status === "Hired").length;
+  const hiredCount = tutor.applications.filter((a: any) => a.status === "Hired").length;
   const totalApplications = tutor.applications.length;
   const totalReviews = tutor.reviewsReceived.length;
   const avgRating =
     totalReviews > 0
-      ? Number((tutor.reviewsReceived.reduce((acc, r) => acc + r.rating, 0) / totalReviews).toFixed(1))
+      ? Number((tutor.reviewsReceived.reduce((acc: number, r: any) => acc + r.rating, 0) / totalReviews).toFixed(1))
       : 4.9;
 
   // Response rate calculation: if tutor responded/applied to posts, calculate rate
@@ -121,8 +125,8 @@ const getTutorStats = async (tutorId: string) => {
     responseRate,
     avgRating,
     totalReviews,
-    totalYearsExp: tutor.totalYearsExp || "2+ Years",
-    isVerified: tutor.verificationStatus === "Approved" || tutor.isVerified,
+    totalYearsExp: tutor.tutorProfile?.totalYearsExp || "2+ Years",
+    isVerified: tutor.tutorProfile?.verificationStatus === "Approved" || tutor.isVerified,
   };
 };
 

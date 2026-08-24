@@ -31,31 +31,10 @@ model User {
   dob                        String?
   gender                     String?
   city                       String?
-  institution                String?
-  department                 String?
-  yearOfStudy                String?
-  qualifications             Json?
-  subjects                   String[]  @default([])
-  tuitionModes               String[]  @default([])
-  expectedSalary             Int?
-  availability               Json?
-  totalYearsExp              String?
-  experiences                Json?
-  certificateUrl             String?
-  nidCardUrl                 String?
-  studentIdCardUrl           String?
-  videoIntroUrl              String?
-  curriculums                String[]  @default([])
-  specializations            String[]  @default([])
-  verificationStatus         VerificationStatus @default(None)
-  verificationSubmittedAt    DateTime?
-  verificationRejectionReason String?
+  tutorProfile               TutorProfile?
   referralCode               String?   @unique
   referredById               String?
   rewardPoints               Int       @default(0)
-  isPriorityListed           Boolean   @default(false)
-  isTutorOfTheMonth          Boolean   @default(false)
-  isPhonePrivate             Boolean   @default(true)
   transactions               Transaction[]
   conversationsAsStudent     Conversation[] @relation("StudentConversations")
   conversationsAsTutor       Conversation[] @relation("TutorConversations")
@@ -335,4 +314,38 @@ model TrialBooking {
 
   @@index([tutorId])
   @@index([studentId])
+}
+
+model TutorProfile {
+  id                          String             @id @default(uuid())
+  userId                      String             @unique
+  user                        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  institution                 String?
+  department                  String?
+  yearOfStudy                 String?
+  qualifications              Json?
+  subjects                    String[]           @default([])
+  tuitionModes                String[]           @default([])
+  expectedSalary              Int?
+  availability                Json?
+  totalYearsExp               String?
+  experiences                 Json?
+  certificateUrl              String?
+  nidCardUrl                  String?
+  studentIdCardUrl            String?
+  videoIntroUrl               String?
+  curriculums                 String[]           @default([])
+  specializations             String[]           @default([])
+  verificationStatus          VerificationStatus @default(None)
+  verificationSubmittedAt     DateTime?
+  verificationRejectionReason String?
+  isPriorityListed            Boolean            @default(false)
+  isTutorOfTheMonth           Boolean            @default(false)
+  isPhonePrivate              Boolean            @default(true)
+  
+  createdAt                   DateTime           @default(now())
+  updatedAt                   DateTime           @updatedAt
+
+  @@index([userId])
 }

@@ -423,13 +423,19 @@
 							}
 						],
 						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"name\": \"Updated Name\",\n    \"mobile\": \"01712345678\",\n    \"gender\": \"Male\",\n    \"city\": \"Dhaka\",\n    \"bio\": \"Passionate teacher and learner.\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "data",
+									"value": "{\n    \"name\": \"Updated Name\",\n    \"mobile\": \"01712345678\",\n    \"gender\": \"Male\",\n    \"city\": \"Dhaka\",\n    \"bio\": \"Passionate teacher and learner.\"\n}",
+									"type": "text"
 								}
-							}
+							]
 						},
 						"url": {
 							"raw": "{{base_url}}/user/me",

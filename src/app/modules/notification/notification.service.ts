@@ -157,14 +157,22 @@ const notifyMatchingTutors = async (tuitionPost: {
         role: "tutor",
         status: "active",
         OR: [
-          { subjects: { hasSome: tuitionPost.subjects } },
           { city: { contains: postLoc, mode: "insensitive" } },
+          {
+            tutorProfile: {
+              subjects: { hasSome: tuitionPost.subjects }
+            }
+          },
         ],
       },
       select: {
         id: true,
         city: true,
-        subjects: true,
+        tutorProfile: {
+          select: {
+            subjects: true,
+          }
+        }
       },
       take: 100,
     });

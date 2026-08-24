@@ -140,19 +140,20 @@ const isInstitutionOrQualificationMatch = (
 
 export const getMissingMandatoryTutorProfileFields = (tutor: any): string[] => {
   const missing: string[] = [];
+  const profile = tutor.tutorProfile || tutor;
 
   if (!tutor.name || tutor.name.trim().length < 3) missing.push("Full Name");
   if (!tutor.gender || (tutor.gender !== "Male" && tutor.gender !== "Female")) missing.push("Gender");
   if (!tutor.dob || !tutor.dob.trim()) missing.push("Date of Birth");
   if (!tutor.city || tutor.city.trim().length < 2) missing.push("City / Location");
   if (!tutor.bio || tutor.bio.trim().length < 10) missing.push("Bio");
-  if (!tutor.institution || tutor.institution.trim().length < 2) missing.push("University / Institution");
-  if (!tutor.department || tutor.department.trim().length < 2) missing.push("Department / Major");
-  if (!Array.isArray(tutor.qualifications) || tutor.qualifications.length === 0) missing.push("Educational Qualifications");
-  if (!Array.isArray(tutor.subjects) || tutor.subjects.length === 0) missing.push("Teaching Subjects");
-  if (!Array.isArray(tutor.tuitionModes) || tutor.tuitionModes.length === 0) missing.push("Tuition Modes");
-  if (tutor.expectedSalary === undefined || tutor.expectedSalary === null || Number(tutor.expectedSalary) <= 0) missing.push("Expected Minimum Salary");
-  if (!tutor.totalYearsExp || !tutor.totalYearsExp.trim()) missing.push("Teaching Experience");
+  if (!profile.institution || profile.institution.trim().length < 2) missing.push("University / Institution");
+  if (!profile.department || profile.department.trim().length < 2) missing.push("Department / Major");
+  if (!Array.isArray(profile.qualifications) || profile.qualifications.length === 0) missing.push("Educational Qualifications");
+  if (!Array.isArray(profile.subjects) || profile.subjects.length === 0) missing.push("Teaching Subjects");
+  if (!Array.isArray(profile.tuitionModes) || profile.tuitionModes.length === 0) missing.push("Tuition Modes");
+  if (profile.expectedSalary === undefined || profile.expectedSalary === null || Number(profile.expectedSalary) <= 0) missing.push("Expected Minimum Salary");
+  if (!profile.totalYearsExp || !profile.totalYearsExp.trim()) missing.push("Teaching Experience");
 
   return missing;
 };
@@ -474,6 +475,7 @@ const applyForTuition = async (
 ) => {
   const tutor = await prisma.user.findUnique({
     where: { id: tutorId },
+    include: { tutorProfile: true },
   });
 
   if (!tutor || tutor.deletedAt) {
@@ -484,9 +486,10 @@ const applyForTuition = async (
     throw new AppError("Only registered tutors can apply for tuition posts", 403);
   }
 
-  if (tutor.verificationStatus !== "Approved" && !tutor.isVerified) {
+  const currentStatus = tutor.tutorProfile?.verificationStatus || "None";
+  if (currentStatus !== "Approved" && !tutor.isVerified) {
     throw new AppError(
-      tutor.verificationStatus === "Pending"
+      currentStatus === "Pending"
         ? "Your tutor profile is currently pending verification. An admin must approve your profile documents before you can submit tuition applications."
         : "Please complete your tutor profile verification and submit required documents before applying for tuition posts.",
       403
@@ -546,9 +549,12 @@ const applyForTuition = async (
     }
   }
 
+  const subjects = tutor.tutorProfile?.subjects || [];
+  const tuitionModes = tutor.tutorProfile?.tuitionModes || [];
+
   // 2. Subject Matching Validation
-  if (post.subjects && post.subjects.length > 0 && tutor.subjects && tutor.subjects.length > 0) {
-    const tutorSubs = tutor.subjects.map((s) => s.toLowerCase().trim());
+  if (post.subjects && post.subjects.length > 0 && subjects.length > 0) {
+    const tutorSubs = subjects.map((s) => s.toLowerCase().trim());
     const postSubs = post.subjects.map((s) => s.toLowerCase().trim());
 
     const hasSubjectMatch = postSubs.some((ps) =>
@@ -571,15 +577,15 @@ const applyForTuition = async (
 
     if (!hasSubjectMatch) {
       throw new AppError(
-        `Profile Mismatch: Your teaching subjects (${tutor.subjects.join(", ")}) do not match the required subjects for this tuition (${post.subjects.join(", ")}).`,
+        `Profile Mismatch: Your teaching subjects (${subjects.join(", ")}) do not match the required subjects for this tuition (${post.subjects.join(", ")}).`,
         400
       );
     }
   }
 
   // 3. Tuition Mode Matching Validation
-  if (post.mode && post.mode !== "Both" && tutor.tuitionModes && tutor.tuitionModes.length > 0) {
-    const tutorModesLower = tutor.tuitionModes.map((m) => m.toLowerCase().trim());
+  if (post.mode && post.mode !== "Both" && tuitionModes.length > 0) {
+    const tutorModesLower = tuitionModes.map((m) => m.toLowerCase().trim());
     const postModeLower = post.mode.toLowerCase().trim();
     const matchesMode = tutorModesLower.some(
       (tm) => tm === postModeLower || tm === "both" || tm.includes(postModeLower)
@@ -587,7 +593,7 @@ const applyForTuition = async (
 
     if (!matchesMode) {
       throw new AppError(
-        `Profile Mismatch: This tuition post requires ${post.mode} tuition. Your profile is configured for ${tutor.tuitionModes.join(", ")}.`,
+        `Profile Mismatch: This tuition post requires ${post.mode} tuition. Your profile is configured for ${tuitionModes.join(", ")}.`,
         400
       );
     }
@@ -599,7 +605,8 @@ const applyForTuition = async (
     post.tutorQualification.trim() &&
     post.tutorQualification.trim().toLowerCase() !== "any"
   ) {
-    if (!tutor.institution && !tutor.department && !tutor.bio) {
+    const profile = tutor.tutorProfile;
+    if (!profile?.institution && !profile?.department && !tutor.bio) {
       throw new AppError(
         `This tuition post specifically requires tutors with qualification: "${post.tutorQualification}". Please update your university/qualification in your profile to apply.`,
         400
@@ -608,15 +615,15 @@ const applyForTuition = async (
 
     const isMatched = isInstitutionOrQualificationMatch(
       post.tutorQualification,
-      tutor.institution || "",
-      tutor.department || "",
+      profile?.institution || "",
+      profile?.department || "",
       tutor.bio || "",
-      tutor.totalYearsExp || ""
+      profile?.totalYearsExp || ""
     );
 
     if (!isMatched) {
       throw new AppError(
-        `Profile Mismatch: This tuition post specifically requires tutors with qualification/institution: "${post.tutorQualification}". Your profile (${tutor.institution || "No institution specified"}) does not match this requirement.`,
+        `Profile Mismatch: This tuition post specifically requires tutors with qualification/institution: "${post.tutorQualification}". Your profile (${profile?.institution || "No institution specified"}) does not match this requirement.`,
         400
       );
     }
@@ -651,9 +658,13 @@ const applyForTuition = async (
           name: true,
           email: true,
           mobile: true,
-          institution: true,
-          department: true,
-          totalYearsExp: true,
+          tutorProfile: {
+            select: {
+              institution: true,
+              department: true,
+              totalYearsExp: true,
+            }
+          }
         },
       },
     },
@@ -677,7 +688,7 @@ const applyForTuition = async (
         postId: result.tuitionPostId,
         tutorId: result.tutorId,
         tutorName: result.tutor?.name || tutor.name || "Tutor",
-        institution: result.tutor?.institution || tutor.institution || "Verified Tutor",
+        institution: result.tutor?.tutorProfile?.institution || tutor.tutorProfile?.institution || "Verified Tutor",
         subject: (post.subjects && post.subjects.join(", ")) || post.classLevel || "Tuition",
         rating: 5.0,
         salaryBid: result.salaryBid,
@@ -713,8 +724,8 @@ const applyForTuition = async (
           <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
             <h3 style="margin: 0 0 12px 0; color: #0F5B47; font-size: 16px; font-weight: 700;">👨‍🏫 Tutor Details:</h3>
             <p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Name:</strong> ${tutor.name}</p>
-            ${tutor.institution ? `<p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Institution:</strong> ${tutor.institution} ${tutor.department ? `(${tutor.department})` : ""}</p>` : ""}
-            ${tutor.totalYearsExp ? `<p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Experience:</strong> ${tutor.totalYearsExp}</p>` : ""}
+            ${tutor.tutorProfile?.institution ? `<p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Institution:</strong> ${tutor.tutorProfile.institution} ${tutor.tutorProfile.department ? `(${tutor.tutorProfile.department})` : ""}</p>` : ""}
+            ${tutor.tutorProfile?.totalYearsExp ? `<p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Experience:</strong> ${tutor.tutorProfile.totalYearsExp}</p>` : ""}
             <p style="margin: 4px 0; font-size: 13px; color: #374151;"><strong>Salary Bid:</strong> <span style="color: #0F5B47; font-weight: 800; font-size: 15px;">৳${payload.salaryBid}/month</span> (Your budget: ৳${post.budget})</p>
             ${payload.proposal ? `<p style="margin: 12px 0 0 0; font-size: 13px; color: #4b5563; font-style: italic; background: #ffffff; padding: 12px; border-radius: 8px; border-left: 3px solid #0F5B47;">"${payload.proposal}"</p>` : ""}
           </div>
@@ -890,9 +901,13 @@ const getMatchedJobsForTutor = async (tutorId: string) => {
     select: {
       id: true,
       city: true,
-      subjects: true,
-      expectedSalary: true,
-      curriculums: true,
+      tutorProfile: {
+        select: {
+          subjects: true,
+          expectedSalary: true,
+          curriculums: true,
+        }
+      }
     },
   });
 
@@ -923,9 +938,12 @@ const getMatchedJobsForTutor = async (tutorId: string) => {
 
   const matchedJobs = activePosts.map((post) => {
     let score = 50;
+    const profile = tutor.tutorProfile;
+    const subjects = profile?.subjects || [];
+    const expectedSalary = profile?.expectedSalary || 0;
 
     const subjectOverlap = post.subjects.some((s) =>
-      tutor.subjects.some((ts) => ts.toLowerCase().includes(s.toLowerCase()))
+      subjects.some((ts) => ts.toLowerCase().includes(s.toLowerCase()))
     );
     if (subjectOverlap) score += 30;
 
@@ -933,7 +951,7 @@ const getMatchedJobsForTutor = async (tutorId: string) => {
       score += 15;
     }
 
-    if (tutor.expectedSalary && post.budget >= tutor.expectedSalary) {
+    if (expectedSalary && post.budget >= expectedSalary) {
       score += 5;
     }
 

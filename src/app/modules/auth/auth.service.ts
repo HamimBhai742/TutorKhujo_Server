@@ -16,6 +16,7 @@ import {
 import { enqueueEmail } from "../../queues/email.queue";
 import { getVerificationOtpTemplate } from "../../utils/templates/verificationOtp.template";
 import { getResetPasswordOtpTemplate } from "../../utils/templates/resetPasswordOtp.template";
+import { getPasswordChangedTemplate } from "../../utils/templates/passwordChanged.template";
 
 const registerUser = async (payload: IRegisterUser) => {
   const isUserExist = await prisma.user.findUnique({
@@ -307,6 +308,10 @@ const changePassword = async (
     },
   });
 
+  // Enqueue confirmation email
+  const emailHtml = getPasswordChangedTemplate(user.name);
+  await enqueueEmail(user.email, "Password Changed Successfully", emailHtml);
+
   return { message: "Password updated successfully" };
 };
 
@@ -417,6 +422,10 @@ const resetPassword = async (payload: IResetPassword) => {
       resetPasswordTokenExpires: null,
     },
   });
+
+  // Enqueue confirmation email
+  const emailHtml = getPasswordChangedTemplate(user.name);
+  await enqueueEmail(user.email, "Password Changed Successfully", emailHtml);
 
   return { message: "Password reset successfully. Please log in with your new password." };
 };

@@ -9,7 +9,7 @@ const registerUser = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, {
     statusCode: 201,
     success: true,
-    message: "User registered successfully",
+    message: "User registered successfully. Please check your email for the OTP verification code.",
     data: result,
   });
 });
@@ -38,7 +38,7 @@ const changePassword = catchAsync(async (req: Request, res: Response) => {
 });
 
 const refreshToken = catchAsync(async (req: Request, res: Response) => {
-  const token = req.cookies?.refreshToken || req.body?.token;
+  const token = req.body?.token || req.cookies?.refreshToken;
   const result = await AuthService.refreshToken(token);
 
   sendResponse(res, {
@@ -119,7 +119,7 @@ const googleLogin = catchAsync(async (req: Request, res: Response) => {
 });
 
 const logout = catchAsync(async (req: Request, res: Response) => {
-  const token = req.cookies?.refreshToken || req.body?.refreshToken;
+  const token = req.body?.refreshToken || req.cookies?.refreshToken;
 
   if (token) {
     // Delete refresh token from DB — prevents token reuse after logout

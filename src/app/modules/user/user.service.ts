@@ -6,6 +6,7 @@ import { calculateTutorProfileCompleteness } from "../tuition/tuition.service";
 import { enqueueEmail } from "../../queues/email.queue";
 import { getTutorVerificationEmailTemplate } from "../../utils/templates/tutorVerification.template";
 import { getAccountRoleUpdateEmailTemplate, getAccountStatusUpdateEmailTemplate } from "../../utils/templates/accountStatus.template";
+import { getAccountDeletedEmailTemplate } from "../../utils/templates/accountDeleted.template";
 
 const userSelectFields = {
   id: true,
@@ -557,6 +558,11 @@ const deleteUser = async (userId: string) => {
       status: "inactive",
     },
   });
+
+  // Enqueue deactivation/deletion email via BullMQ
+  const emailHtml = getAccountDeletedEmailTemplate(user.name);
+  enqueueEmail(user.email, "Account Deactivated / Deleted", emailHtml)
+    .catch((err) => console.error("[Email] Account deletion email failed:", err));
 
   return { message: "User deleted successfully" };
 };

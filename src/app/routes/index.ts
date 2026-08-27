@@ -8,6 +8,8 @@ import { messageRoutes } from "../modules/message/message.routes";
 import { notificationRoutes } from "../modules/notification/notification.routes";
 import { reviewRoutes } from "../modules/review/review.routes";
 import { tuitionManagementRoutes } from "../modules/tuition-management/tuition-management.routes";
+import { chatbotRoutes } from "../modules/chatbot/chatbot.routes";
+
 
 export const router = Router();
 
@@ -47,6 +49,10 @@ const moduleRoutes: Array<{ path: string; route: Router }> = [
   {
     path: "/tuition-management",
     route: tuitionManagementRoutes,
+  },
+  {
+    path: "/chatbot",
+    route: chatbotRoutes,
   },
 ];
 

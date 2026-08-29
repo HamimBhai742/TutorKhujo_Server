@@ -245,6 +245,7 @@ const getMessages = async (conversationId: string, requestingUserId: string) => 
     blockedById: conversation.blockedById,
     messages: messages.map((m) => ({
       id: m.id,
+      senderId: m.senderId,
       sender: m.senderId === conversation.studentId ? "student" : "tutor",
       content: m.content,
       isRead: m.isRead,

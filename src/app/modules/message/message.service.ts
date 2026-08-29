@@ -192,6 +192,47 @@ const sendMessage = async (senderId: string, conversationId: string, content: st
 const getMessages = async (conversationId: string, requestingUserId: string) => {
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
+    include: {
+      student: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          role: true,
+          profilePic: true,
+          city: true,
+          bio: true,
+          isVerified: true,
+          tuitionPosts: {
+            where: { status: "Active" },
+            take: 1,
+            select: {
+              classLevel: true,
+              subjects: true,
+              budget: true,
+              location: true,
+              mode: true,
+              frequency: true,
+            },
+          },
+        },
+      },
+      tutor: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          role: true,
+          profilePic: true,
+          city: true,
+          bio: true,
+          isVerified: true,
+          tutorProfile: true,
+        },
+      },
+    },
   });
 
   if (!conversation) {
@@ -240,9 +281,25 @@ const getMessages = async (conversationId: string, requestingUserId: string) => 
     orderBy: { createdAt: "asc" },
   });
 
+  const isRequesterStudent = conversation.studentId === requestingUserId;
+  const otherUser = isRequesterStudent ? conversation.tutor : conversation.student;
+
   return {
     isBlocked: conversation.isBlocked,
     blockedById: conversation.blockedById,
+    otherParty: {
+      id: otherUser.id,
+      name: otherUser.name,
+      email: otherUser.email,
+      mobile: otherUser.mobile,
+      role: otherUser.role,
+      profilePic: otherUser.profilePic,
+      city: otherUser.city,
+      bio: otherUser.bio,
+      isVerified: otherUser.isVerified,
+      tutorProfile: (otherUser as any).tutorProfile || null,
+      tuitionPost: (otherUser as any).tuitionPosts?.[0] || null,
+    },
     messages: messages.map((m) => ({
       id: m.id,
       senderId: m.senderId,

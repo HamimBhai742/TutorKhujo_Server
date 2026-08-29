@@ -29,6 +29,18 @@ const userSelectFields = {
   tutorProfile: true,
 };
 
+const formatUserWithTutorProfile = (user: any) => {
+  if (!user) return null;
+  const { tutorProfile, ...userFields } = user;
+  const { id: _tutorProfileId, userId: _userId, createdAt: _tpCreatedAt, updatedAt: _tpUpdatedAt, ...tutorProfileFields } = tutorProfile || {};
+  return {
+    ...tutorProfileFields,
+    ...userFields,
+    id: userFields.id,
+    tutorProfileId: _tutorProfileId,
+  };
+};
+
 const getMe = async (userId: string) => {
   let user = await prisma.user.findUnique({
     where: { id: userId },
@@ -49,11 +61,7 @@ const getMe = async (userId: string) => {
     });
   }
 
-  const { tutorProfile, ...userFields } = user as any;
-  return {
-    ...userFields,
-    ...(tutorProfile || {}),
-  };
+  return formatUserWithTutorProfile(user);
 };
 
 const updateMe = async (userId: string, payload: IUpdateProfile) => {
@@ -68,13 +76,14 @@ const updateMe = async (userId: string, payload: IUpdateProfile) => {
   const {
     name, fullName, mobile, dob, gender, city, bio, profilePic, isFirstLogin,
     salary, expectedSalary, qualifications,
-    ...rest
+    subjects, tuitionMode, tuitionModes,
+    availability, totalYearsExp, experiences,
+    certificateUrl, nidCardUrl, studentIdCardUrl, videoIntroUrl,
+    curriculums, specializations, isPhonePrivate
   } = payload as any;
 
   const userUpdateData: any = {};
-  if (fullName) userUpdateData.name = fullName;
-  else if (name) userUpdateData.name = name;
-
+  if (name !== undefined || fullName !== undefined) userUpdateData.name = name || fullName;
   if (mobile !== undefined) userUpdateData.mobile = mobile;
   if (dob !== undefined) userUpdateData.dob = dob;
   if (gender !== undefined) userUpdateData.gender = gender;
@@ -84,61 +93,64 @@ const updateMe = async (userId: string, payload: IUpdateProfile) => {
   if (isFirstLogin !== undefined) userUpdateData.isFirstLogin = isFirstLogin;
 
   const tutorUpdateData: any = {};
+  if (payload.institution !== undefined) tutorUpdateData.institution = payload.institution;
+  if (payload.department !== undefined) tutorUpdateData.department = payload.department;
+  if (payload.yearOfStudy !== undefined) tutorUpdateData.yearOfStudy = payload.yearOfStudy;
+  if (qualifications !== undefined) tutorUpdateData.qualifications = qualifications;
+  if (subjects !== undefined) tutorUpdateData.subjects = subjects;
   
-  const tutorFieldsList = [
-    "subjects", "tuitionModes", "availability", "totalYearsExp", "experiences",
-    "certificateUrl", "nidCardUrl", "studentIdCardUrl", "videoIntroUrl", "curriculums",
-    "specializations", "verificationStatus", "verificationSubmittedAt", "verificationRejectionReason",
-    "isPriorityListed", "isTutorOfTheMonth", "isPhonePrivate"
-  ];
+  if (tuitionModes !== undefined) {
+    tutorUpdateData.tuitionModes = Array.isArray(tuitionModes) ? tuitionModes : [tuitionModes];
+  } else if (tuitionMode !== undefined) {
+    tutorUpdateData.tuitionModes = Array.isArray(tuitionMode) ? tuitionMode : [tuitionMode];
+  }
+  
+  if (expectedSalary !== undefined) tutorUpdateData.expectedSalary = expectedSalary;
+  else if (salary !== undefined) tutorUpdateData.expectedSalary = salary;
 
-  tutorFieldsList.forEach(field => {
-    if (rest[field] !== undefined) {
-      tutorUpdateData[field] = rest[field];
+  if (availability !== undefined) tutorUpdateData.availability = availability;
+  if (totalYearsExp !== undefined) tutorUpdateData.totalYearsExp = totalYearsExp;
+  if (experiences !== undefined) tutorUpdateData.experiences = experiences;
+  if (certificateUrl !== undefined) tutorUpdateData.certificateUrl = certificateUrl;
+  if (nidCardUrl !== undefined) tutorUpdateData.nidCardUrl = nidCardUrl;
+  if (studentIdCardUrl !== undefined) tutorUpdateData.studentIdCardUrl = studentIdCardUrl;
+  if (videoIntroUrl !== undefined) tutorUpdateData.videoIntroUrl = videoIntroUrl;
+  if (curriculums !== undefined) tutorUpdateData.curriculums = curriculums;
+  if (specializations !== undefined) tutorUpdateData.specializations = specializations;
+  if (isPhonePrivate !== undefined) tutorUpdateData.isPhonePrivate = isPhonePrivate;
+
+  // Auto-fill institution and department from primary qualification if present
+  if (Array.isArray(qualifications) && qualifications.length > 0) {
+    const primaryQual = qualifications[0];
+    if (primaryQual.institution && !tutorUpdateData.institution) {
+      tutorUpdateData.institution = primaryQual.institution;
     }
-  });
-
-  if (salary !== undefined && salary !== null && !isNaN(Number(salary))) {
-    tutorUpdateData.expectedSalary = Number(salary);
-  } else if (expectedSalary !== undefined && expectedSalary !== null && !isNaN(Number(expectedSalary))) {
-    tutorUpdateData.expectedSalary = Number(expectedSalary);
+    if (primaryQual.subject && !tutorUpdateData.department) {
+      tutorUpdateData.department = primaryQual.subject;
+    }
+    if (primaryQual.level && !tutorUpdateData.yearOfStudy) {
+      tutorUpdateData.yearOfStudy = primaryQual.level;
+    }
   }
 
-  if (qualifications !== undefined) {
-    tutorUpdateData.qualifications = qualifications;
-    if (Array.isArray(qualifications) && qualifications.length > 0) {
-      const primary = qualifications[0];
-      if (primary?.institution) tutorUpdateData.institution = primary.institution;
-      if (primary?.subject) tutorUpdateData.department = primary.subject;
-      if (primary?.level) tutorUpdateData.yearOfStudy = primary.level;
-    }
-  } else {
-    if (rest.institution !== undefined) tutorUpdateData.institution = rest.institution;
-    if (rest.department !== undefined) tutorUpdateData.department = rest.department;
-    if (rest.yearOfStudy !== undefined) tutorUpdateData.yearOfStudy = rest.yearOfStudy;
-  }
-
-  const existingProfile = await prisma.tutorProfile.findUnique({
-    where: { userId },
-  });
-
-  if (tutorUpdateData.nidCardUrl || tutorUpdateData.studentIdCardUrl) {
-    const currentStatus = existingProfile?.verificationStatus || "None";
-    if (currentStatus === "None" || currentStatus === "Rejected") {
+  // If submitting documents, set status to Pending
+  if (certificateUrl || nidCardUrl || studentIdCardUrl) {
+    const existingProfile = await prisma.tutorProfile.findUnique({
+      where: { userId },
+    });
+    if (!existingProfile || existingProfile.verificationStatus === "None" || existingProfile.verificationStatus === "Rejected") {
       tutorUpdateData.verificationStatus = "Pending";
       tutorUpdateData.verificationSubmittedAt = new Date();
-    }
-  }
 
-  const tempTutor = {
-    ...user,
-    ...userUpdateData,
-    ...(existingProfile || {}),
-    ...tutorUpdateData
-  };
-  const completeness = calculateTutorProfileCompleteness(tempTutor);
-  if (completeness >= 100) {
-    tutorUpdateData.isPriorityListed = true;
+      // Enqueue notification & email for admin
+      NotificationService.sendNotification({
+        userId,
+        title: "Verification Under Review ⏳",
+        message: "Your profile verification request has been submitted. Our team will review it shortly.",
+        type: "VERIFICATION_SUBMITTED",
+        link: "/profile",
+      }).catch((err: any) => console.error("[Notification] Verification submitted notif failed:", err));
+    }
   }
 
   const updatedUser = await prisma.user.update({
@@ -155,11 +167,7 @@ const updateMe = async (userId: string, payload: IUpdateProfile) => {
     select: userSelectFields,
   });
 
-  const { tutorProfile, ...userFields } = updatedUser as any;
-  return {
-    ...userFields,
-    ...(tutorProfile || {}),
-  };
+  return formatUserWithTutorProfile(updatedUser);
 };
 
 const getAllUsers = async (query: {
@@ -168,63 +176,63 @@ const getAllUsers = async (query: {
   search?: string;
   role?: string;
 }) => {
-  const page = query.page || 1;
-  const limit = Math.min(query.limit || 20, 100); // max 100 per request
+  const page = Number(query.page) || 1;
+  const limit = Number(query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  const where: Record<string, unknown> = { deletedAt: null };
+  const where: any = { deletedAt: null };
+
   if (query.search) {
     where.OR = [
       { name: { contains: query.search, mode: "insensitive" } },
       { email: { contains: query.search, mode: "insensitive" } },
+      { mobile: { contains: query.search, mode: "insensitive" } },
+      { city: { contains: query.search, mode: "insensitive" } },
     ];
   }
-  if (query.role) {
+
+  if (query.role && query.role !== "all") {
     where.role = query.role;
   }
 
   const [users, total] = await Promise.all([
     prisma.user.findMany({
       where,
-      skip,
-      take: limit,
       select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        mobile: true,
-        isVerified: true,
+        ...userSelectFields,
         tutorProfile: {
           select: {
             verificationStatus: true,
+            totalYearsExp: true,
+            expectedSalary: true,
           }
-        },
-        createdAt: true,
-        updatedAt: true,
+        }
       },
+      skip,
+      take: limit,
       orderBy: { createdAt: "desc" },
     }),
     prisma.user.count({ where }),
   ]);
 
-  const mappedUsers = users.map(u => {
+  const formattedUsers = users.map((u: any) => {
     const { tutorProfile, ...userFields } = u;
     return {
       ...userFields,
       verificationStatus: tutorProfile?.verificationStatus || "None",
+      totalYearsExp: tutorProfile?.totalYearsExp || null,
+      expectedSalary: tutorProfile?.expectedSalary || null,
     };
   });
 
   return {
-    data: mappedUsers,
     meta: {
-      total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      total,
+      totalPage: Math.ceil(total / limit),
     },
+    data: formattedUsers,
   };
 };
 
@@ -238,85 +246,46 @@ const getUserById = async (userId: string) => {
     throw new AppError("User not found", 404);
   }
 
-  return user;
+  return formatUserWithTutorProfile(user);
 };
 
 const updateUserStatus = async (
   userId: string,
-  payload: IUpdateUserStatus
+  payload: { status: "active" | "blocked" | "inactive" }
 ) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
   });
 
-  if (!user) {
+  if (!user || user.deletedAt) {
     throw new AppError("User not found", 404);
-  }
-
-  const userUpdateData: any = {};
-  if (payload.status !== undefined) userUpdateData.status = payload.status;
-  if (payload.role !== undefined) userUpdateData.role = payload.role;
-  if (payload.isVerified !== undefined) userUpdateData.isVerified = payload.isVerified;
-
-  const tutorUpdateData: any = {};
-  if (payload.isVerified !== undefined) {
-    tutorUpdateData.verificationStatus = payload.isVerified ? "Approved" : "None";
   }
 
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: {
-      ...userUpdateData,
-      ...(payload.isVerified !== undefined ? {
-        tutorProfile: {
-          upsert: {
-            update: tutorUpdateData,
-            create: tutorUpdateData,
-          }
-        }
-      } : {})
-    },
+    data: { status: payload.status },
     select: userSelectFields,
   });
 
-  // Notify user if role is updated
-  if (payload.role !== undefined && payload.role !== user.role) {
-    NotificationService.sendNotification({
-      userId,
-      title: "Account Role Updated 🔄",
-      message: `Your account role has been updated to ${payload.role}.`,
-      type: "ROLE_UPDATE",
-      link: "/dashboard",
-    }).catch((err) => console.error("[Notification] Role update notification failed:", err));
-
-    const emailHtml = getAccountRoleUpdateEmailTemplate(user.name, payload.role);
-    enqueueEmail(user.email, "Account Role Updated 🔄", emailHtml)
-      .catch((err) => console.error("[Email] Role update email failed:", err));
-  }
-
-  // Notify user if status is updated
-  if (payload.status !== undefined && payload.status !== user.status) {
+  // If status changed to blocked or active, notify user via notification and email
+  if (payload.status !== user.status) {
     const isBlocked = payload.status === "blocked";
     NotificationService.sendNotification({
       userId,
       title: isBlocked ? "Account Suspended ⚠️" : "Account Reactivated ✅",
-      message: isBlocked 
-        ? "Your account has been blocked/suspended. Please check your email for details."
+      message: isBlocked
+        ? "Your account has been suspended by the administrator. Contact support for assistance."
         : "Your account status has been restored. You can now use the platform normally.",
       type: "STATUS_UPDATE",
       link: "/dashboard",
-    }).catch((err) => console.error("[Notification] Status update notification failed:", err));
+    }).catch((err: any) => console.error("[Notification] Status update notification failed:", err));
 
     const emailHtml = getAccountStatusUpdateEmailTemplate(user.name, payload.status);
     enqueueEmail(user.email, isBlocked ? "Account Suspended ⚠️" : "Account Reactivated", emailHtml)
       .catch((err) => console.error("[Email] Status update email failed:", err));
   }
 
-  const { tutorProfile, ...userFields } = updatedUser as any;
-  return {
-    ...userFields,
-    ...(tutorProfile || {}),
-  };
+  return formatUserWithTutorProfile(updatedUser);
 };
 
 const onboardTutor = async (userId: string, payload: any) => {
@@ -328,52 +297,55 @@ const onboardTutor = async (userId: string, payload: any) => {
     throw new AppError("User not found", 404);
   }
 
-  const { fullName, salary, expectedSalary, qualifications, ...rest } = payload;
+  const {
+    gender,
+    city,
+    bio,
+    institution,
+    department,
+    yearOfStudy,
+    qualifications,
+    subjects,
+    tuitionModes,
+    expectedSalary,
+    availability,
+    totalYearsExp,
+    experiences,
+    certificateUrl,
+    nidCardUrl,
+    studentIdCardUrl,
+    videoIntroUrl,
+    curriculums,
+    specializations,
+    isPhonePrivate
+  } = payload;
 
-  const userUpdateData: any = {
-    role: "tutor",
-    isFirstLogin: false,
-    isVerified: true,
-  };
-  if (fullName) {
-    userUpdateData.name = fullName;
-  }
-  ["mobile", "dob", "gender", "city", "bio", "profilePic"].forEach(field => {
-    if (rest[field] !== undefined) {
-      userUpdateData[field] = rest[field];
-    }
-  });
+  const userUpdateData: any = { isFirstLogin: false };
+  if (gender) userUpdateData.gender = gender;
+  if (city) userUpdateData.city = city;
+  if (bio) userUpdateData.bio = bio;
 
   const tutorUpdateData: any = {
-    verificationStatus: "Approved",
+    institution,
+    department,
+    yearOfStudy,
+    qualifications: qualifications || [],
+    subjects: subjects || [],
+    tuitionModes: tuitionModes || [],
+    expectedSalary: expectedSalary ? Number(expectedSalary) : null,
+    availability,
+    totalYearsExp,
+    experiences: experiences || [],
+    certificateUrl,
+    nidCardUrl,
+    studentIdCardUrl,
+    videoIntroUrl,
+    curriculums: curriculums || [],
+    specializations: specializations || [],
+    isPhonePrivate: isPhonePrivate ?? true,
+    verificationStatus: certificateUrl || nidCardUrl || studentIdCardUrl ? "Pending" : "None",
+    verificationSubmittedAt: certificateUrl || nidCardUrl || studentIdCardUrl ? new Date() : null,
   };
-
-  const tutorFieldsList = [
-    "subjects", "tuitionModes", "availability", "totalYearsExp", "experiences",
-    "certificateUrl", "nidCardUrl", "studentIdCardUrl", "videoIntroUrl", "curriculums",
-    "specializations", "isPhonePrivate"
-  ];
-  tutorFieldsList.forEach(field => {
-    if (rest[field] !== undefined) {
-      tutorUpdateData[field] = rest[field];
-    }
-  });
-
-  if (salary !== undefined && salary !== null && !isNaN(Number(salary))) {
-    tutorUpdateData.expectedSalary = Number(salary);
-  } else if (expectedSalary !== undefined && expectedSalary !== null && !isNaN(Number(expectedSalary))) {
-    tutorUpdateData.expectedSalary = Number(expectedSalary);
-  }
-
-  if (qualifications !== undefined) {
-    tutorUpdateData.qualifications = qualifications;
-    if (Array.isArray(qualifications) && qualifications.length > 0) {
-      const primary = qualifications[0];
-      if (primary?.institution) tutorUpdateData.institution = primary.institution;
-      if (primary?.subject) tutorUpdateData.department = primary.subject;
-      if (primary?.level) tutorUpdateData.yearOfStudy = primary.level;
-    }
-  }
 
   const updatedUser = await prisma.user.update({
     where: { id: userId },
@@ -389,11 +361,7 @@ const onboardTutor = async (userId: string, payload: any) => {
     select: userSelectFields,
   });
 
-  const { tutorProfile, ...userFields } = updatedUser as any;
-  return {
-    ...userFields,
-    ...(tutorProfile || {}),
-  };
+  return formatUserWithTutorProfile(updatedUser);
 };
 
 const getAdminStats = async () => {
@@ -404,24 +372,20 @@ const getAdminStats = async () => {
     pendingVerifications,
     totalTuitions,
     activeTuitions,
+    hiredTuitions,
+    totalApplications,
+    pendingApplications,
   ] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { role: "tutor" } }),
-    prisma.user.count({ where: { role: "student" } }),
+    prisma.user.count({ where: { deletedAt: null } }),
+    prisma.user.count({ where: { role: "tutor", deletedAt: null } }),
+    prisma.user.count({ where: { role: "student", deletedAt: null } }),
     prisma.user.count({ where: { role: "tutor", tutorProfile: { verificationStatus: "Pending" } } }),
     prisma.tuitionPost.count(),
     prisma.tuitionPost.count({ where: { status: "Active" } }),
+    prisma.tuitionPost.count({ where: { status: "Closed" } }),
+    prisma.tuitionApplication.count(),
+    prisma.tuitionApplication.count({ where: { status: "Pending" } }),
   ]);
-
-  const transactions = await prisma.transaction.aggregate({
-    _sum: {
-      amount: true,
-    },
-    where: {
-      type: "Invoice_Payment",
-      status: "Success",
-    },
-  });
 
   return {
     totalUsers,
@@ -430,7 +394,9 @@ const getAdminStats = async () => {
     pendingVerifications,
     totalTuitions,
     activeTuitions,
-    totalRevenue: transactions._sum.amount || 0,
+    hiredTuitions,
+    totalApplications,
+    pendingApplications,
   };
 };
 
@@ -440,27 +406,34 @@ const getPendingVerifications = async () => {
       role: "tutor",
       deletedAt: null,
       tutorProfile: {
-        verificationStatus: {
-          not: "None",
-        },
+        verificationStatus: "Pending",
       },
     },
     select: {
       id: true,
       name: true,
       email: true,
-      createdAt: true,
+      mobile: true,
+      city: true,
+      profilePic: true,
       tutorProfile: {
         select: {
           institution: true,
           department: true,
           yearOfStudy: true,
-          subjects: true,
           certificateUrl: true,
           nidCardUrl: true,
+          studentIdCardUrl: true,
           verificationStatus: true,
-        }
-      }
+          verificationSubmittedAt: true,
+        },
+      },
+      createdAt: true,
+    },
+    orderBy: {
+      tutorProfile: {
+        verificationSubmittedAt: "desc",
+      },
     },
   });
 
@@ -468,58 +441,68 @@ const getPendingVerifications = async () => {
     const profile = t.tutorProfile;
     return {
       id: t.id,
-      tutorName: t.name,
+      name: t.name,
       email: t.email,
+      mobile: t.mobile,
+      city: t.city,
+      profilePic: t.profilePic,
       institution: profile?.institution || "N/A",
       department: profile?.department || "N/A",
       yearOfStudy: profile?.yearOfStudy || "N/A",
-      subjects: profile?.subjects || [],
-      certificateUrl: profile?.certificateUrl || "transcript.pdf",
-      nidCardUrl: profile?.nidCardUrl || "nid.jpg",
-      status: profile?.verificationStatus || "None",
-      submissionDate: t.createdAt.toISOString().split("T")[0],
+      certificateUrl: profile?.certificateUrl || null,
+      nidCardUrl: profile?.nidCardUrl || null,
+      studentIdCardUrl: profile?.studentIdCardUrl || null,
+      verificationStatus: profile?.verificationStatus || "Pending",
+      verificationSubmittedAt: profile?.verificationSubmittedAt || t.createdAt,
+      createdAt: t.createdAt,
     };
   });
 };
 
 const updateVerificationStatus = async (
   userId: string,
-  status: "Approved" | "Rejected"
+  payload: {
+    status: "Approved" | "Rejected";
+    rejectionReason?: string;
+  }
 ) => {
+  const { status, rejectionReason } = payload;
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
+    include: { tutorProfile: true },
   });
 
-  if (!user) {
-    throw new AppError("User not found", 404);
+  if (!user || user.role !== "tutor" || user.deletedAt) {
+    throw new AppError("Tutor not found", 404);
   }
 
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: {
-      isVerified: status === "Approved" ? true : user.isVerified,
+      isVerified: status === "Approved",
       tutorProfile: {
         update: {
           verificationStatus: status,
-        }
-      }
+          verificationRejectionReason: status === "Rejected" ? rejectionReason : null,
+        },
+      },
     },
     select: userSelectFields,
   });
 
-  // Notify the tutor about their verification decision
-  const notifPayload =
-    status === "Approved"
-      ? {
-          title: "Tutor Verification Approved! ✅",
-          message: "Congratulations! Your tutor profile has been verified by our team. You can now apply for tuitions across the platform.",
-          link: "/dashboard",
-        }
-      : {
-          title: "Verification Not Approved",
-          message: "Your tutor verification was reviewed but not approved. Please re-submit valid documents or contact support for assistance.",
-          link: "/tutor-onboarding",
-        };
+  // Create in-app notification & send email via BullMQ
+  const notifPayload = status === "Approved"
+    ? {
+        title: "Profile Verified! ✅",
+        message: "Congratulations! Your tutor profile has been verified. You can now apply for all tuition posts.",
+        link: "/dashboard",
+      }
+    : {
+        title: "Verification Needs Attention ⚠️",
+        message: `Your verification request was rejected. Reason: ${rejectionReason || "Documents provided were insufficient or unclear."} Please re-upload valid documents in your profile.`,
+        link: "/profile",
+      };
 
   NotificationService.sendNotification({
     userId,
@@ -527,18 +510,14 @@ const updateVerificationStatus = async (
     message: notifPayload.message,
     type: "VERIFICATION_STATUS",
     link: notifPayload.link,
-  }).catch((err) => console.error("[Notification] Failed to notify tutor of verification status:", err));
+  }).catch((err: any) => console.error("[Notification] Failed to notify tutor of verification status:", err));
 
   // Enqueue verification email status update via BullMQ
   const emailHtml = getTutorVerificationEmailTemplate(user.name, status);
   enqueueEmail(user.email, status === "Approved" ? "Tutor Profile Verified! ✅" : "Tutor Verification Update", emailHtml)
     .catch((err) => console.error("[Email] Failed to enqueue verification status email:", err));
 
-  const { tutorProfile, ...userFields } = updatedUser as any;
-  return {
-    ...userFields,
-    ...(tutorProfile || {}),
-  };
+  return formatUserWithTutorProfile(updatedUser);
 };
 
 const deleteUser = async (userId: string) => {
@@ -554,15 +533,14 @@ const deleteUser = async (userId: string) => {
   await prisma.user.update({
     where: { id: userId },
     data: {
-      deletedAt: new Date(),
       status: "inactive",
+      deletedAt: new Date(),
     },
   });
 
-  // Enqueue deactivation/deletion email via BullMQ
-  const emailHtml = getAccountDeletedEmailTemplate(user.name);
-  enqueueEmail(user.email, "Account Deactivated / Deleted", emailHtml)
-    .catch((err) => console.error("[Email] Account deletion email failed:", err));
+  // Enqueue goodbye email via BullMQ
+  enqueueEmail(user.email, "Account Deletion Confirmation", getAccountDeletedEmailTemplate(user.name))
+    .catch((err: any) => console.error("[Email] Account deletion email failed:", err));
 
   return { message: "User deleted successfully" };
 };
@@ -596,32 +574,7 @@ const getAllPublicTutors = async (query?: { search?: string; subject?: string; l
 
   const tutors = await prisma.user.findMany({
     where,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      gender: true,
-      city: true,
-      bio: true,
-      profilePic: true,
-      isVerified: true,
-      tutorProfile: true,
-      reviewsReceived: {
-        select: {
-          id: true,
-          rating: true,
-          comment: true,
-          createdAt: true,
-          student: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      },
-      createdAt: true,
-    },
+    select: userSelectFields,
     orderBy: [
       { tutorProfile: { isTutorOfTheMonth: "desc" } },
       { tutorProfile: { isPriorityListed: "desc" } },
@@ -630,60 +583,28 @@ const getAllPublicTutors = async (query?: { search?: string; subject?: string; l
     ],
   });
 
-  return tutors.map(t => {
-    const { tutorProfile, ...userFields } = t;
-    return {
-      ...userFields,
-      ...(tutorProfile || {}),
-    };
-  });
+  return tutors.map(t => formatUserWithTutorProfile(t));
 };
 
 const getPublicTutorById = async (id: string) => {
   const tutor = await prisma.user.findFirst({
     where: {
-      id,
+      OR: [
+        { id },
+        { tutorProfile: { id } }
+      ],
       role: "tutor",
       status: "active",
       deletedAt: null,
     },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      gender: true,
-      city: true,
-      bio: true,
-      profilePic: true,
-      isVerified: true,
-      tutorProfile: true,
-      reviewsReceived: {
-        select: {
-          id: true,
-          rating: true,
-          comment: true,
-          createdAt: true,
-          student: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      },
-      createdAt: true,
-    },
+    select: userSelectFields,
   });
 
   if (!tutor) {
     throw new AppError("Tutor not found", 404);
   }
 
-  const { tutorProfile, ...userFields } = tutor;
-  return {
-    ...userFields,
-    ...(tutorProfile || {}),
-  };
+  return formatUserWithTutorProfile(tutor);
 };
 
 export const UserService = {

@@ -79,8 +79,13 @@ const getTutorReviews = async (tutorId: string) => {
 };
 
 const getTutorStats = async (tutorId: string) => {
-  const tutor = await prisma.user.findUnique({
-    where: { id: tutorId },
+  const tutor = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { id: tutorId },
+        { tutorProfile: { id: tutorId } }
+      ]
+    },
     select: {
       id: true,
       name: true,

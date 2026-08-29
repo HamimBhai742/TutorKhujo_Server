@@ -92,13 +92,20 @@ const getMyConversations = async (userId: string) => {
         id: c.id,
         recipientId: counterParty?.id || "",
         studentName: counterParty?.name || "User",
+        name: counterParty?.name || "User",
         role: counterParty?.role || "",
         avatarBg: counterParty?.profilePic || bgColors[colorIdx],
+        profilePic: counterParty?.profilePic || null,
         lastMessage: lastMsg?.content || "No messages yet",
         time: lastMsg ? new Date(lastMsg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "New",
         unreadCount,
         isBlocked: c.isBlocked,
         blockedById: c.blockedById,
+        student: c.student,
+        tutor: c.tutor,
+        messages: c.messages,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
       };
     })
   );
@@ -166,16 +173,14 @@ const sendMessage = async (senderId: string, conversationId: string, content: st
     console.error("Socket emit failed:", err);
   }
 
-  // Send in-app notification ONLY IF the recipient is offline
-  if (!isUserOnline(recipientId)) {
-    NotificationService.sendNotification({
-      userId: recipientId,
-      title: `💬 New message from ${senderName}`,
-      message: content.length > 80 ? content.slice(0, 77) + "..." : content,
-      type: "MESSAGE",
-      link: `/dashboard?tab=messages`,
-    }).catch((err) => console.error("[Message] Failed to notify offline recipient of new message:", err));
-  }
+  // Always create and dispatch in-app notification for the recipient
+  NotificationService.sendNotification({
+    userId: recipientId,
+    title: `💬 New message from ${senderName}`,
+    message: content.length > 80 ? content.slice(0, 77) + "..." : content,
+    type: "MESSAGE",
+    link: `/dashboard?tab=messages`,
+  }).catch((err: any) => console.error("[Message] Failed to notify recipient of new message:", err));
 
   return message;
 };

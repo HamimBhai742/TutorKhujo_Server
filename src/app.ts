@@ -67,14 +67,14 @@ app.use(
 // ==============================================================
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200,
+  max: 50000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => process.env.NODE_ENV !== "production",
   message: {
     success: false,
     message: "Too many requests from this IP. Please try again after 15 minutes.",
   },
-  skip: (req) => req.path === "/api/v1/health", // don't rate-limit health checks
 });
 
 // Strict Rate Limiter — Auth routes: 10 attempts per 15 minutes per IP

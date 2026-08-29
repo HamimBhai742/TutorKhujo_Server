@@ -20,16 +20,15 @@ export const initSocket = async (httpServer: HttpServer) => {
   io = new SocketServer(httpServer, {
     cors: {
       origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
+        if (!origin || process.env.NODE_ENV !== "production") return callback(null, true);
 
         const isAllowed =
           allowedSocketOrigins.includes(origin) ||
           origin.endsWith(".vercel.app") ||
-          (process.env.NODE_ENV !== "production" &&
-            (origin.includes("localhost:") ||
-              origin.includes(".ngrok-free.dev") ||
-              origin.startsWith("http://10.") ||
-              origin.startsWith("http://192.168.")));
+          origin.includes("localhost:") ||
+          origin.includes(".ngrok-free.dev") ||
+          origin.startsWith("http://10.") ||
+          origin.startsWith("http://192.168.");
 
         if (isAllowed) {
           callback(null, true);

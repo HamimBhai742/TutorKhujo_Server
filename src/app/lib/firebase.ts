@@ -1,27 +1,44 @@
 import { initializeApp, getApps, cert } from "firebase-admin/app";
+import fs from "fs";
+import path from "path";
 
 /**
  * Firebase Admin Initialization.
- * Uses FIREBASE_SERVICE_ACCOUNT_JSON environment variable (JSON string)
- * instead of a hardcoded local file path — works in any deployment environment.
- *
- * To set: copy the firebase service account JSON content and set as env var.
- * Example: FIREBASE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'
+ * Checks FIREBASE_SERVICE_ACCOUNT_JSON env var first, then falls back to local service account file.
  */
 if (getApps().length === 0) {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  let serviceAccount: any = null;
 
-  if (!serviceAccountJson) {
-    console.warn("[Firebase] FIREBASE_SERVICE_ACCOUNT_JSON not set — FCM push notifications will be disabled.");
-  } else {
+  if (serviceAccountJson) {
     try {
-      const serviceAccount = JSON.parse(serviceAccountJson);
+      serviceAccount = JSON.parse(serviceAccountJson);
+    } catch (error) {
+      console.error("[Firebase] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:", error);
+    }
+  }
+
+  if (!serviceAccount) {
+    try {
+      const localPath = path.resolve(__dirname, "../../config/firebase-serviceaccount.json");
+      if (fs.existsSync(localPath)) {
+        serviceAccount = JSON.parse(fs.readFileSync(localPath, "utf-8"));
+      }
+    } catch (err) {
+      console.warn("[Firebase] Could not load local firebase-serviceaccount.json:", err);
+    }
+  }
+
+  if (serviceAccount) {
+    try {
       initializeApp({
         credential: cert(serviceAccount),
       });
       console.log("[Firebase] Admin initialized successfully.");
     } catch (error) {
-      console.error("[Firebase] Failed to parse service account JSON:", error);
+      console.error("[Firebase] Failed to initialize Firebase Admin:", error);
     }
+  } else {
+    console.warn("[Firebase] No service account configuration found — FCM push notifications disabled.");
   }
 }

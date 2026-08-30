@@ -8,6 +8,7 @@ const sendNotification = async (payload: {
   message: string;
   type: string;
   link?: string;
+  data?: Record<string, string>;
 }) => {
   // 1. Save to Database
   const notification = await prisma.notification.create({
@@ -47,6 +48,7 @@ const sendNotification = async (payload: {
           type: payload.type,
           link: payload.link || "",
           notificationId: notification.id,
+          ...(payload.data || {}),
         },
       };
 

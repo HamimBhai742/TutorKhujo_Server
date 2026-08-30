@@ -173,7 +173,7 @@ const sendMessage = async (senderId: string, conversationId: string, content: st
     console.error("Socket emit failed:", err);
   }
 
-  // Always create and dispatch in-app notification for the recipient
+  // Always dispatch notification for the recipient (FCM push for device + in-app alert)
   NotificationService.sendNotification({
     userId: recipientId,
     title: `💬 New message from ${senderName}`,

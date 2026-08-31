@@ -33,7 +33,7 @@ export const getRedisConnectionConfig = () => {
 const checkRedisPort = (): Promise<boolean> => {
   return new Promise((resolve) => {
     const socket = new net.Socket();
-    socket.setTimeout(1000); // 1s timeout
+    socket.setTimeout(5000); // 5s timeout
     
     socket.on("connect", () => {
       socket.destroy();

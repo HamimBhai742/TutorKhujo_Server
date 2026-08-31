@@ -34,7 +34,7 @@ export default {
   NODE_ENV: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT) || 5001,
   database_url: process.env.DATABASE_URL as string,
-  redis_url: process.env.REDIS_URL || "redis://localhost:6379",
+  redis_url: (process.env.REDIS_URL || "redis://localhost:6379").replace(/^["']|["']$/g, ""),
   password_salt: Number(process.env.PASSWORD_SALT) || 12,
   jwt: {
     secret: process.env.JWT_SECRET as string,

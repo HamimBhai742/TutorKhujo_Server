@@ -173,14 +173,22 @@ const sendMessage = async (senderId: string, conversationId: string, content: st
     console.error("Socket emit failed:", err);
   }
 
-  // Always dispatch notification for the recipient (FCM push for device + in-app alert)
-  NotificationService.sendNotification({
-    userId: recipientId,
-    title: `💬 New message from ${senderName}`,
-    message: content.length > 80 ? content.slice(0, 77) + "..." : content,
-    type: "MESSAGE",
-    link: `/dashboard?tab=messages`,
-  }).catch((err: any) => console.error("[Message] Failed to notify recipient of new message:", err));
+  // Only dispatch push notification if recipient is OFFLINE / app is closed (Messenger-like behavior)
+  if (!isUserOnline(recipientId)) {
+    NotificationService.sendNotification({
+      userId: recipientId,
+      title: `💬 New message from ${senderName}`,
+      message: content.length > 80 ? content.slice(0, 77) + "..." : content,
+      type: "MESSAGE",
+      link: `/messages`,
+      data: {
+        conversationId: conversationId,
+        recipientId: senderId,
+        name: senderName,
+        type: "MESSAGE",
+      },
+    }).catch((err: any) => console.error("[Message] Failed to notify recipient of new message:", err));
+  }
 
   return message;
 };

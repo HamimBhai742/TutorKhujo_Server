@@ -39,17 +39,26 @@ const sendNotification = async (payload: {
     if (deviceTokens.length > 0) {
       const tokens = deviceTokens.map((dt) => dt.token);
       
+      const customData: Record<string, string> = {
+        type: String(payload.type || "GENERAL"),
+        link: String(payload.link || ""),
+        notificationId: String(notification.id || ""),
+      };
+
+      if (payload.data) {
+        Object.entries(payload.data).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) {
+            customData[k] = String(v);
+          }
+        });
+      }
+
       const fcmPayload = {
         notification: {
           title: payload.title,
           body: payload.message,
         },
-        data: {
-          type: payload.type,
-          link: payload.link || "",
-          notificationId: notification.id,
-          ...(payload.data || {}),
-        },
+        data: customData,
       };
 
       const response = await getMessaging().sendEachForMulticast({

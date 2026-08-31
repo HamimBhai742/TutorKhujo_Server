@@ -22,6 +22,19 @@ router.patch(
   NotificationController.markAsRead
 );
 
+router.delete(
+  "/clear-all",
+  auth("student", "tutor", "admin"),
+  NotificationController.deleteAllNotifications
+);
+
+router.delete(
+  "/:id",
+  auth("student", "tutor", "admin"),
+  NotificationController.deleteNotification
+);
+
+
 router.post(
   "/register-token",
   auth("student", "tutor", "admin"),

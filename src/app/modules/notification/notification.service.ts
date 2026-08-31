@@ -153,6 +153,25 @@ const deregisterDeviceToken = async (userId: string, token: string) => {
   return result;
 };
 
+const deleteNotification = async (userId: string, notificationId: string) => {
+  const result = await prisma.notification.deleteMany({
+    where: {
+      id: notificationId,
+      userId,
+    },
+  });
+  return result;
+};
+
+const deleteAllNotifications = async (userId: string) => {
+  const result = await prisma.notification.deleteMany({
+    where: {
+      userId,
+    },
+  });
+  return result;
+};
+
 const notifyMatchingTutors = async (tuitionPost: {
   id: string;
   subjects: string[];
@@ -161,20 +180,35 @@ const notifyMatchingTutors = async (tuitionPost: {
   classLevel: string;
 }) => {
   try {
-    const postLoc = tuitionPost.location.toLowerCase();
+    const postLoc = (tuitionPost.location || "").toLowerCase();
+    const locKeywords = postLoc
+      .split(/[\s,]+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length > 2);
+
+    const orConditions: any[] = [];
+    if (locKeywords.length > 0) {
+      locKeywords.forEach((kw) => {
+        orConditions.push({ city: { contains: kw, mode: "insensitive" } });
+      });
+    } else if (postLoc) {
+      orConditions.push({ city: { contains: postLoc, mode: "insensitive" } });
+    }
+
+    if (tuitionPost.subjects && tuitionPost.subjects.length > 0) {
+      orConditions.push({
+        tutorProfile: {
+          subjects: { hasSome: tuitionPost.subjects },
+        },
+      });
+    }
+
     // Cap at 100 matching tutors
     const matchingTutors = await prisma.user.findMany({
       where: {
         role: "tutor",
         status: "active",
-        OR: [
-          { city: { contains: postLoc, mode: "insensitive" } },
-          {
-            tutorProfile: {
-              subjects: { hasSome: tuitionPost.subjects }
-            }
-          },
-        ],
+        ...(orConditions.length > 0 ? { OR: orConditions } : {}),
       },
       select: {
         id: true,
@@ -182,8 +216,8 @@ const notifyMatchingTutors = async (tuitionPost: {
         tutorProfile: {
           select: {
             subjects: true,
-          }
-        }
+          },
+        },
       },
       take: 100,
     });
@@ -200,7 +234,11 @@ const notifyMatchingTutors = async (tuitionPost: {
           title: `🎯 ${matchPercent}% Tuition Match in ${tuitionPost.location}!`,
           message: `Class: ${tuitionPost.classLevel} • Subjects: ${tuitionPost.subjects.join(", ")} • Salary: ৳${tuitionPost.budget}/mo`,
           type: "TUITION_MATCH",
-          link: `/dashboard?tab=matched_jobs`,
+          link: `/tuition-details?id=${tuitionPost.id}`,
+          data: {
+            tuitionId: tuitionPost.id,
+            type: "TUITION_MATCH",
+          },
         }).catch((err) =>
           console.error(`[Notification] Failed to notify tutor ${tutor.id}:`, err)
         );
@@ -216,7 +254,10 @@ export const NotificationService = {
   getMyNotifications,
   markAsRead,
   markAllAsRead,
+  deleteNotification,
+  deleteAllNotifications,
   registerDeviceToken,
   deregisterDeviceToken,
   notifyMatchingTutors,
 };
+

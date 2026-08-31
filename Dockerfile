@@ -36,7 +36,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=5000
+ENV PORT=5026
 
 # Create dedicated non-root user
 RUN addgroup --system --gid 1001 nodejs && \
@@ -53,10 +53,10 @@ RUN mkdir -p /app/uploads && chown -R expressjs:nodejs /app
 
 USER expressjs
 
-EXPOSE 5000
+EXPOSE 5026
 
 # Container Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:5000/api/v1/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:5026/api/v1/health || exit 1
 
 CMD ["node", "dist/server.js"]

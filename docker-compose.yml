@@ -51,21 +51,22 @@ services:
     container_name: tutorkhujo_server
     restart: always
     ports:
-      - "${SERVER_PORT:-5026}:5000"
+      - "${SERVER_PORT:-5026}:5026"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    command: sh -c "npx prisma db push && node dist/server.js"
     env_file:
       - .env
     environment:
-      PORT: 5000
+      PORT: 5026
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-tutor_khujo}?schema=public
       REDIS_URL: redis://redis:6379
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/v1/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5026/api/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -73,32 +74,36 @@ services:
     networks:
       - tutorkhujo_net
 
-  # ---------------------------------------------------------
-  # 4. Next.js Frontend Client Service
-  # ---------------------------------------------------------
-  client:
-    build:
-      context: ../TutorKhujo
-      dockerfile: Dockerfile
-    container_name: tutorkhujo_client
-    restart: always
-    ports:
-      - "${CLIENT_PORT:-3000}:3000"
-    depends_on:
-      server:
-        condition: service_healthy
-    environment:
-      PORT: 3000
-      NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5026/api/v1}
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    networks:
-      - tutorkhujo_net
+#  # ---------------------------------------------------------
+#  # 4. Next.js Frontend Client Service
+#  # ---------------------------------------------------------
+#  client:
+#    build:
+#      context: ../TutorKhujo
+#      dockerfile: Dockerfile
+#      args:
+#        - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-Tutor Khujo}
+#        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:5026/api/v1}
+#        - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+#    container_name: tutorkhujo_client
+#    restart: always
+#    ports:
+#      - "${CLIENT_PORT:-3000}:3000"
+#    depends_on:
+#      server:
+#        condition: service_healthy
+#    environment:
+#      PORT: 3000
+#      NODE_ENV: production
+#      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5026/api/v1}
+#    healthcheck:
+#      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+#      start_period: 20s
+#    networks:
+#      - tutorkhujo_net
 
 volumes:
   postgres_data:

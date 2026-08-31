@@ -54,18 +54,27 @@ const sendNotification = async (payload: {
       }
 
       const fcmPayload = {
+        tokens,
         notification: {
           title: payload.title,
           body: payload.message,
         },
         data: customData,
+        android: {
+          priority: "high" as const,
+          notification: {
+            sound: "default",
+            channelId: "default",
+            priority: "max" as const,
+            defaultSound: true,
+            defaultVibrateTimings: true,
+          },
+        },
       };
 
-      const response = await getMessaging().sendEachForMulticast({
-        tokens,
-        notification: fcmPayload.notification,
-        data: fcmPayload.data,
-      });
+      console.log(`[FCM] Sending push to ${tokens.length} device(s) for user ${payload.userId}...`);
+      const response = await getMessaging().sendEachForMulticast(fcmPayload as any);
+      console.log(`[FCM] Sent. Success: ${response.successCount}, Failure: ${response.failureCount}`);
 
       // Cleanup expired tokens if FCM indicates they are invalid
       if (response.failureCount > 0) {
@@ -73,6 +82,7 @@ const sendNotification = async (payload: {
         response.responses.forEach((resp: any, idx: number) => {
           if (!resp.success && resp.error) {
             const code = resp.error.code;
+            console.error(`[FCM] Device token error:`, resp.error);
             if (
               code === "messaging/invalid-registration-token" ||
               code === "messaging/registration-token-not-registered"
@@ -91,6 +101,8 @@ const sendNotification = async (payload: {
           console.log(`Cleaned up ${invalidTokens.length} expired FCM device tokens.`);
         }
       }
+    } else {
+      console.log(`[FCM] User ${payload.userId} has no registered device tokens.`);
     }
   } catch (err) {
     console.error("FCM push notification sending failed:", err);
@@ -98,6 +110,7 @@ const sendNotification = async (payload: {
 
   return notification;
 };
+
 
 const getMyNotifications = async (userId: string) => {
   const result = await prisma.notification.findMany({

@@ -47,7 +47,18 @@ const getMe = async (userId: string) => {
     select: {
       ...userSelectFields,
       reviewsReceived: {
-        select: { rating: true },
+        include: {
+          student: {
+            select: {
+              id: true,
+              name: true,
+              profilePic: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
       },
       applications: {
         select: { status: true },
@@ -71,7 +82,18 @@ const getMe = async (userId: string) => {
       select: {
         ...userSelectFields,
         reviewsReceived: {
-          select: { rating: true },
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                profilePic: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
         },
         applications: {
           select: { status: true },
@@ -118,6 +140,7 @@ const getMe = async (userId: string) => {
   const formatted = formatUserWithTutorProfile(user);
   return {
     ...formatted,
+    reviewsReceived: reviews,
     stats,
   };
 };

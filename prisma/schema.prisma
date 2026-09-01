@@ -45,6 +45,8 @@ model User {
   messageReactions           MessageReaction[]
   reviewsReceived            Review[]  @relation("TutorReviews")
   reviewsGiven               Review[]  @relation("StudentReviews")
+  contactUnlocks             ContactUnlock[]
+  pointTransactions          PointTransaction[]
   deletedAt                  DateTime?  // Soft delete — null means active
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
@@ -348,4 +350,34 @@ model TutorProfile {
   updatedAt                   DateTime           @updatedAt
 
   @@index([userId])
+}
+
+model ContactUnlock {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetType  String   // "TUTOR_PROFILE", "TUITION_POST"
+  targetId    String   // tutorId or tuitionPostId
+  pointsSpent Int      @default(10)
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, targetType, targetId])
+  @@index([userId])
+  @@index([targetId])
+}
+
+model PointTransaction {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  points      Int      // e.g. +100, -10
+  type        String   // "PACKAGE_PURCHASE", "TUTOR_UNLOCK", "TUITION_APPLY", "TUITION_CONTACT_UNLOCK", "WELCOME_BONUS"
+  amountPaid  Int?     // in BDT, e.g. 99, 199, 299, 399, 499
+  method      String?  // "bKash", "Nagad", "Card", "System"
+  trxId       String?
+  description String
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
 }

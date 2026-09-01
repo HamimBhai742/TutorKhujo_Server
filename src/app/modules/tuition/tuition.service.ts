@@ -642,32 +642,64 @@ const applyForTuition = async (
     throw new AppError("You have already applied for this tuition post", 400);
   }
 
-  const result = await prisma.tuitionApplication.create({
-    data: {
-      tuitionPostId,
-      tutorId,
-      salaryBid: payload.salaryBid,
-      proposal: payload.proposal || null,
-      status: "Pending",
-    },
-    include: {
-      tuitionPost: true,
-      tutor: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          mobile: true,
-          tutorProfile: {
-            select: {
-              institution: true,
-              department: true,
-              totalYearsExp: true,
-            }
-          }
+  const APPLY_COST = 10;
+  if ((tutor.rewardPoints || 0) < APPLY_COST) {
+    throw new AppError(
+      `Insufficient points. You need at least ${APPLY_COST} points to apply for this tuition post. Your current balance is ${tutor.rewardPoints || 0} points.`,
+      400
+    );
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Deduct 10 points from tutor
+    await tx.user.update({
+      where: { id: tutorId },
+      data: {
+        rewardPoints: { decrement: APPLY_COST },
+      },
+    });
+
+    // 2. Record point transaction
+    await tx.pointTransaction.create({
+      data: {
+        userId: tutorId,
+        points: -APPLY_COST,
+        type: "TUITION_APPLY",
+        description: `Applied for Tuition Post #${post.id.slice(0, 8)} (${post.classLevel} - ${post.subjects?.join(", ") || "General"})`,
+      },
+    });
+
+    // 3. Create application
+    const app = await tx.tuitionApplication.create({
+      data: {
+        tuitionPostId,
+        tutorId,
+        salaryBid: payload.salaryBid,
+        proposal: payload.proposal || null,
+        status: "Pending",
+      },
+      include: {
+        tuitionPost: true,
+        tutor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            rewardPoints: true,
+            tutorProfile: {
+              select: {
+                institution: true,
+                department: true,
+                totalYearsExp: true,
+              },
+            },
+          },
         },
       },
-    },
+    });
+
+    return app;
   });
 
   // Notify the student that a tutor has applied to their post (in-app notification)

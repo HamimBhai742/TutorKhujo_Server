@@ -9,6 +9,7 @@ import { notificationRoutes } from "../modules/notification/notification.routes"
 import { reviewRoutes } from "../modules/review/review.routes";
 import { tuitionManagementRoutes } from "../modules/tuition-management/tuition-management.routes";
 import { chatbotRoutes } from "../modules/chatbot/chatbot.routes";
+import { pointsRoutes } from "../modules/points/points.routes";
 
 
 export const router = Router();
@@ -33,6 +34,10 @@ const moduleRoutes: Array<{ path: string; route: Router }> = [
   {
     path: "/payments",
     route: paymentRoutes,
+  },
+  {
+    path: "/points",
+    route: pointsRoutes,
   },
   {
     path: "/messages",

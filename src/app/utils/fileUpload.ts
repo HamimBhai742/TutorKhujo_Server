@@ -1,39 +1,25 @@
 import multer from "multer";
 import path from "path";
-import fs from "fs";
 
-const uploadDir = path.join(process.cwd(), "uploads");
-try {
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-} catch (err) {
-  console.warn("[Upload] Warning: Could not create uploads directory synchronously:", err);
-}
-
-const storage = multer.diskStorage({
-  destination: function (_req, _file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (_req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
-  },
-});
+// In-memory storage for streaming directly to Cloudflare R2 without local disk pollution
+const memoryStorage = multer.memoryStorage();
 
 export const upload = multer({
-  storage: storage,
+  storage: memoryStorage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB
+    fileSize: 15 * 1024 * 1024, // 15MB max file size
   },
   fileFilter: (_req, file, cb) => {
-    const allowedExtensions = /jpeg|jpg|png|webp|gif|pdf/;
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedExtensions.test(ext)) {
+    const allowedExtensions = /jpeg|jpg|png|webp|gif|pdf|doc|docx/;
+    const ext = path.extname(file.originalname).toLowerCase().replace(".", "");
+    const mimeAllowed = /(image\/(jpeg|png|webp|gif))|(application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document))/.test(
+      file.mimetype
+    );
+
+    if (allowedExtensions.test(ext) || mimeAllowed) {
       cb(null, true);
     } else {
-      cb(new Error("Only image files (.png, .jpg, .jpeg, .webp, .gif) and PDFs are allowed"));
+      cb(new Error("Only images (.png, .jpg, .jpeg, .webp, .gif) and documents (.pdf, .doc, .docx) are allowed."));
     }
   },
 });

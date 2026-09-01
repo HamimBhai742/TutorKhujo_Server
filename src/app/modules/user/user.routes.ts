@@ -9,12 +9,24 @@ import { upload } from "../../utils/fileUpload";
 
 const router = Router();
 
-// File & Photo Upload Endpoint
+// File & Photo Upload & Delete Endpoints (Cloudflare R2)
 router.post(
   "/upload",
   auth("student", "tutor", "admin"),
   upload.single("file"),
   UserController.uploadFile
+);
+
+router.delete(
+  "/upload",
+  auth("student", "tutor", "admin"),
+  UserController.deleteFile
+);
+
+router.delete(
+  "/file",
+  auth("student", "tutor", "admin"),
+  UserController.deleteFile
 );
 
 // Public: Get all tutors with optional filters

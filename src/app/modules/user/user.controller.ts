@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { catchAsync } from "../../utils/catchAsync";
 import { sendResponse } from "../../utils/sendResponse";
 import { UserService } from "./user.service";
+import { uploadToR2, deleteFromR2 } from "../../utils/r2Storage";
 
 const getMe = catchAsync(async (req: Request, res: Response) => {
   const user = req.user!;
@@ -20,8 +21,13 @@ const updateMe = catchAsync(async (req: Request, res: Response) => {
   const payload = { ...req.body };
 
   if (req.file) {
-    const serverBaseUrl = process.env.SERVER_BASE_URL || `${req.protocol}://${req.get("host")}`;
-    payload.profilePic = `${serverBaseUrl}/uploads/${req.file.filename}`;
+    const uploadResult = await uploadToR2(req.file, {
+      folder: "avatars",
+      optimizeImage: true,
+      maxWidth: 1000,
+      quality: 85,
+    });
+    payload.profilePic = uploadResult.url;
   }
 
   const result = await UserService.updateMe(user.id, payload);
@@ -167,19 +173,51 @@ const uploadFile = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const serverBaseUrl = process.env.SERVER_BASE_URL || `${req.protocol}://${req.get("host")}`;
-  const fileUrl = `${serverBaseUrl}/uploads/${req.file.filename}`;
+  // Determine folder category from query or body: 'avatars' | 'documents' | 'verifications' | 'tuitions' | 'general'
+  const folder = (req.query.folder as string) || (req.body?.folder as string) || "general";
+
+  // If document (pdf/doc), avoid image transformation; if image, optimize
+  const isDocument = /pdf|doc|docx/i.test(req.file.mimetype);
+  const uploadResult = await uploadToR2(req.file, {
+    folder,
+    optimizeImage: !isDocument,
+    maxWidth: 1600,
+    quality: 85,
+  });
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: "File uploaded successfully",
+    message: "File uploaded successfully to Cloudflare R2",
     data: {
-      url: fileUrl,
-      filename: req.file.filename,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
+      url: uploadResult.url,
+      key: uploadResult.key,
+      filename: uploadResult.originalName,
+      size: uploadResult.size,
+      mimetype: uploadResult.mimetype,
     },
+  });
+});
+
+const deleteFile = catchAsync(async (req: Request, res: Response) => {
+  const fileUrlOrKey = (req.body?.url as string) || (req.body?.key as string) || (req.query?.url as string) || (req.query?.key as string);
+
+  if (!fileUrlOrKey) {
+    return sendResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: "File URL or key is required for deletion",
+      data: null,
+    });
+  }
+
+  const deleted = await deleteFromR2(fileUrlOrKey);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: deleted ? "File deleted successfully from Cloudflare R2" : "File not found or already deleted",
+    data: { deleted },
   });
 });
 
@@ -188,6 +226,7 @@ export const UserController = {
   updateMe,
   onboardTutor,
   uploadFile,
+  deleteFile,
   getAdminStats,
   getPendingVerifications,
   updateVerificationStatus,

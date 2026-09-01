@@ -7,6 +7,7 @@ import { enqueueEmail } from "../../queues/email.queue";
 import { getTutorVerificationEmailTemplate } from "../../utils/templates/tutorVerification.template";
 import { getAccountRoleUpdateEmailTemplate, getAccountStatusUpdateEmailTemplate } from "../../utils/templates/accountStatus.template";
 import { getAccountDeletedEmailTemplate } from "../../utils/templates/accountDeleted.template";
+import { deleteFromR2, deleteMultipleFromR2 } from "../../utils/r2Storage";
 
 const userSelectFields = {
   id: true,
@@ -130,6 +131,29 @@ const updateMe = async (userId: string, payload: IUpdateProfile) => {
     }
     if (primaryQual.level && !tutorUpdateData.yearOfStudy) {
       tutorUpdateData.yearOfStudy = primaryQual.level;
+    }
+  }
+
+  // Clean up old profile picture from R2 if it changed
+  if (profilePic !== undefined && user.profilePic && user.profilePic !== profilePic) {
+    deleteFromR2(user.profilePic).catch((err) => console.error("[R2 Storage] Failed to delete old profile pic:", err));
+  }
+
+  // Clean up old verification documents from R2 if replaced
+  if (certificateUrl !== undefined || nidCardUrl !== undefined || studentIdCardUrl !== undefined) {
+    const existingProfile = await prisma.tutorProfile.findUnique({
+      where: { userId },
+    });
+    if (existingProfile) {
+      if (certificateUrl !== undefined && existingProfile.certificateUrl && existingProfile.certificateUrl !== certificateUrl) {
+        deleteFromR2(existingProfile.certificateUrl).catch((err) => console.error("[R2 Storage] Failed to delete old cert:", err));
+      }
+      if (nidCardUrl !== undefined && existingProfile.nidCardUrl && existingProfile.nidCardUrl !== nidCardUrl) {
+        deleteFromR2(existingProfile.nidCardUrl).catch((err) => console.error("[R2 Storage] Failed to delete old NID:", err));
+      }
+      if (studentIdCardUrl !== undefined && existingProfile.studentIdCardUrl && existingProfile.studentIdCardUrl !== studentIdCardUrl) {
+        deleteFromR2(existingProfile.studentIdCardUrl).catch((err) => console.error("[R2 Storage] Failed to delete old Student ID:", err));
+      }
     }
   }
 
@@ -537,6 +561,22 @@ const deleteUser = async (userId: string) => {
       deletedAt: new Date(),
     },
   });
+
+  // Clean up user files from R2 in background
+  prisma.tutorProfile.findUnique({ where: { userId } }).then((tp) => {
+    const filesToDelete = [
+      user.profilePic,
+      tp?.certificateUrl,
+      tp?.nidCardUrl,
+      tp?.studentIdCardUrl,
+    ].filter(Boolean);
+
+    if (filesToDelete.length > 0) {
+      deleteMultipleFromR2(filesToDelete).catch((err) =>
+        console.error("[R2 Storage] Failed to delete files during user deletion:", err)
+      );
+    }
+  }).catch((err) => console.error("[R2 Storage] Failed to fetch tutorProfile for file deletion:", err));
 
   // Enqueue goodbye email via BullMQ
   enqueueEmail(user.email, "Account Deletion Confirmation", getAccountDeletedEmailTemplate(user.name))

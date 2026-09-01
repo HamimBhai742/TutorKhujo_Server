@@ -16,6 +16,7 @@ const createTuitionPostValidationSchema = z.object({
       required_error: "Location is required",
     }).min(1, "Location cannot be empty"),
     genderPreference: z.string().optional(),
+    tutorQualification: z.string().optional(),
     extraNotes: z.string().optional(),
   }),
 });
@@ -31,6 +32,7 @@ const updateTuitionPostValidationSchema = z.object({
     location: z.string().optional(),
     status: z.enum(["Active", "Paused", "Closed"]).optional(),
     genderPreference: z.string().optional(),
+    tutorQualification: z.string().optional(),
     extraNotes: z.string().optional(),
   }),
 });

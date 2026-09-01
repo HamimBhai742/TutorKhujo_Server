@@ -39,24 +39,42 @@ const sendNotification = async (payload: {
     if (deviceTokens.length > 0) {
       const tokens = deviceTokens.map((dt) => dt.token);
       
+      const customData: Record<string, string> = {
+        type: String(payload.type || "GENERAL"),
+        link: String(payload.link || ""),
+        notificationId: String(notification.id || ""),
+      };
+
+      if (payload.data) {
+        Object.entries(payload.data).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) {
+            customData[k] = String(v);
+          }
+        });
+      }
+
       const fcmPayload = {
+        tokens,
         notification: {
           title: payload.title,
           body: payload.message,
         },
-        data: {
-          type: payload.type,
-          link: payload.link || "",
-          notificationId: notification.id,
-          ...(payload.data || {}),
+        data: customData,
+        android: {
+          priority: "high" as const,
+          notification: {
+            sound: "default",
+            channelId: "default",
+            priority: "max" as const,
+            defaultSound: true,
+            defaultVibrateTimings: true,
+          },
         },
       };
 
-      const response = await getMessaging().sendEachForMulticast({
-        tokens,
-        notification: fcmPayload.notification,
-        data: fcmPayload.data,
-      });
+      console.log(`[FCM] Sending push to ${tokens.length} device(s) for user ${payload.userId}...`);
+      const response = await getMessaging().sendEachForMulticast(fcmPayload as any);
+      console.log(`[FCM] Sent. Success: ${response.successCount}, Failure: ${response.failureCount}`);
 
       // Cleanup expired tokens if FCM indicates they are invalid
       if (response.failureCount > 0) {
@@ -64,6 +82,7 @@ const sendNotification = async (payload: {
         response.responses.forEach((resp: any, idx: number) => {
           if (!resp.success && resp.error) {
             const code = resp.error.code;
+            console.error(`[FCM] Device token error:`, resp.error);
             if (
               code === "messaging/invalid-registration-token" ||
               code === "messaging/registration-token-not-registered"
@@ -82,6 +101,8 @@ const sendNotification = async (payload: {
           console.log(`Cleaned up ${invalidTokens.length} expired FCM device tokens.`);
         }
       }
+    } else {
+      console.log(`[FCM] User ${payload.userId} has no registered device tokens.`);
     }
   } catch (err) {
     console.error("FCM push notification sending failed:", err);
@@ -89,6 +110,7 @@ const sendNotification = async (payload: {
 
   return notification;
 };
+
 
 const getMyNotifications = async (userId: string) => {
   const result = await prisma.notification.findMany({
@@ -144,6 +166,25 @@ const deregisterDeviceToken = async (userId: string, token: string) => {
   return result;
 };
 
+const deleteNotification = async (userId: string, notificationId: string) => {
+  const result = await prisma.notification.deleteMany({
+    where: {
+      id: notificationId,
+      userId,
+    },
+  });
+  return result;
+};
+
+const deleteAllNotifications = async (userId: string) => {
+  const result = await prisma.notification.deleteMany({
+    where: {
+      userId,
+    },
+  });
+  return result;
+};
+
 const notifyMatchingTutors = async (tuitionPost: {
   id: string;
   subjects: string[];
@@ -152,20 +193,35 @@ const notifyMatchingTutors = async (tuitionPost: {
   classLevel: string;
 }) => {
   try {
-    const postLoc = tuitionPost.location.toLowerCase();
+    const postLoc = (tuitionPost.location || "").toLowerCase();
+    const locKeywords = postLoc
+      .split(/[\s,]+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length > 2);
+
+    const orConditions: any[] = [];
+    if (locKeywords.length > 0) {
+      locKeywords.forEach((kw) => {
+        orConditions.push({ city: { contains: kw, mode: "insensitive" } });
+      });
+    } else if (postLoc) {
+      orConditions.push({ city: { contains: postLoc, mode: "insensitive" } });
+    }
+
+    if (tuitionPost.subjects && tuitionPost.subjects.length > 0) {
+      orConditions.push({
+        tutorProfile: {
+          subjects: { hasSome: tuitionPost.subjects },
+        },
+      });
+    }
+
     // Cap at 100 matching tutors
     const matchingTutors = await prisma.user.findMany({
       where: {
         role: "tutor",
         status: "active",
-        OR: [
-          { city: { contains: postLoc, mode: "insensitive" } },
-          {
-            tutorProfile: {
-              subjects: { hasSome: tuitionPost.subjects }
-            }
-          },
-        ],
+        ...(orConditions.length > 0 ? { OR: orConditions } : {}),
       },
       select: {
         id: true,
@@ -173,8 +229,8 @@ const notifyMatchingTutors = async (tuitionPost: {
         tutorProfile: {
           select: {
             subjects: true,
-          }
-        }
+          },
+        },
       },
       take: 100,
     });
@@ -191,7 +247,11 @@ const notifyMatchingTutors = async (tuitionPost: {
           title: `🎯 ${matchPercent}% Tuition Match in ${tuitionPost.location}!`,
           message: `Class: ${tuitionPost.classLevel} • Subjects: ${tuitionPost.subjects.join(", ")} • Salary: ৳${tuitionPost.budget}/mo`,
           type: "TUITION_MATCH",
-          link: `/dashboard?tab=matched_jobs`,
+          link: `/tuition-details?id=${tuitionPost.id}`,
+          data: {
+            tuitionId: tuitionPost.id,
+            type: "TUITION_MATCH",
+          },
         }).catch((err) =>
           console.error(`[Notification] Failed to notify tutor ${tutor.id}:`, err)
         );
@@ -207,7 +267,10 @@ export const NotificationService = {
   getMyNotifications,
   markAsRead,
   markAllAsRead,
+  deleteNotification,
+  deleteAllNotifications,
   registerDeviceToken,
   deregisterDeviceToken,
   notifyMatchingTutors,
 };
+

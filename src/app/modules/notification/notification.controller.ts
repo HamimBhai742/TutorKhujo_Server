@@ -53,6 +53,31 @@ const registerDeviceToken = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const deleteNotification = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const { id } = req.params;
+  const result = await NotificationService.deleteNotification(user.id, id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Notification deleted successfully",
+    data: result,
+  });
+});
+
+const deleteAllNotifications = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const result = await NotificationService.deleteAllNotifications(user.id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "All notifications deleted successfully",
+    data: result,
+  });
+});
+
 const deregisterDeviceToken = catchAsync(async (req: Request, res: Response) => {
   const user = req.user!;
   const { token } = req.body;
@@ -70,6 +95,10 @@ export const NotificationController = {
   getMyNotifications,
   markAsRead,
   markAllAsRead,
+  deleteNotification,
+  deleteAllNotifications,
   registerDeviceToken,
   deregisterDeviceToken,
 };
+
+

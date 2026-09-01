@@ -45,7 +45,29 @@ const formatUserWithTutorProfile = (user: any) => {
 const getMe = async (userId: string) => {
   let user = await prisma.user.findUnique({
     where: { id: userId },
-    select: userSelectFields,
+    select: {
+      ...userSelectFields,
+      reviewsReceived: {
+        include: {
+          student: {
+            select: {
+              id: true,
+              name: true,
+              profilePic: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
+      applications: {
+        select: { status: true },
+      },
+      tuitionPosts: {
+        select: { status: true },
+      },
+    },
   });
 
   if (!user) {
@@ -58,11 +80,70 @@ const getMe = async (userId: string) => {
     user = await prisma.user.update({
       where: { id: userId },
       data: { referralCode: code },
-      select: userSelectFields,
+      select: {
+        ...userSelectFields,
+        reviewsReceived: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                profilePic: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+        applications: {
+          select: { status: true },
+        },
+        tuitionPosts: {
+          select: { status: true },
+        },
+      },
     });
   }
 
-  return formatUserWithTutorProfile(user);
+  const reviews = user.reviewsReceived || [];
+  const applications = user.applications || [];
+  const tuitionPosts = user.tuitionPosts || [];
+
+  const totalReviews = reviews.length;
+  const avgRating = totalReviews > 0
+    ? Number((reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews).toFixed(1))
+    : 5.0;
+
+  const hiredCount = applications.filter((a) => a.status === "Hired").length;
+  const activePostsCount = tuitionPosts.filter((p) => p.status === "Active").length;
+
+  let badgesCount = 1;
+  if (user.isVerified) badgesCount++;
+  if (user.isFirstLogin === false) badgesCount++;
+  if (user.profilePic) badgesCount++;
+  if (user.tutorProfile?.verificationStatus === "Approved") badgesCount += 2;
+  if (hiredCount > 0) badgesCount += hiredCount;
+
+  const stats = {
+    rating: avgRating,
+    totalReviews,
+    studentsCount: hiredCount,
+    hiredCount,
+    appliedCount: applications.length,
+    experience: user.tutorProfile?.totalYearsExp || "1+ Yrs",
+    badgesCount,
+    totalPosts: tuitionPosts.length,
+    activePosts: activePostsCount,
+    rewardPoints: user.rewardPoints || 0,
+  };
+
+  const formatted = formatUserWithTutorProfile(user);
+  return {
+    ...formatted,
+    reviewsReceived: reviews,
+    stats,
+  };
 };
 
 const updateMe = async (userId: string, payload: IUpdateProfile) => {

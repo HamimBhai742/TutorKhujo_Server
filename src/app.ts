@@ -36,7 +36,7 @@ app.use(cookieParser());
 // ==============================================================
 // CORS
 // ==============================================================
-const allowedOrigins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"];
+const allowedOrigins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002","https://tutor-khujo.hamim.dpdns.org"];
 
 app.use(
   cors({
@@ -48,7 +48,7 @@ app.use(
         origin.endsWith(".vercel.app") ||
         (process.env.NODE_ENV !== "production" &&
           (origin.includes("localhost:") ||
-            origin.includes(".ngrok-free.dev") ||
+            origin.includes(".hamim.dpdns.org") ||
             origin.startsWith("http://10.") ||
             origin.startsWith("http://192.168.")));
 

@@ -151,6 +151,17 @@ const getAllPublicTutors = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getLeaderboardTutors = catchAsync(async (req: Request, res: Response) => {
+  const result = await UserService.getLeaderboardTutors(req.query);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Leaderboard tutors retrieved successfully",
+    data: result,
+  });
+});
+
 const getPublicTutorById = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
   const result = await UserService.getPublicTutorById(id);
@@ -233,6 +244,7 @@ export const UserController = {
   getAllUsers,
   getUserById,
   getAllPublicTutors,
+  getLeaderboardTutors,
   getPublicTutorById,
   updateUserStatus,
   deleteUser,

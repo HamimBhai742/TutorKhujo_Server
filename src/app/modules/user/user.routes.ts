@@ -29,6 +29,9 @@ router.delete(
   UserController.deleteFile
 );
 
+// Public: Get leaderboard tutors with dynamic performance ranks
+router.get("/leaderboard", UserController.getLeaderboardTutors);
+
 // Public: Get all tutors with optional filters
 router.get("/tutors", UserController.getAllPublicTutors);
 

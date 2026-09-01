@@ -695,7 +695,26 @@ const getAllPublicTutors = async (query?: { search?: string; subject?: string; l
 
   const tutors = await prisma.user.findMany({
     where,
-    select: userSelectFields,
+    select: {
+      ...userSelectFields,
+      reviewsReceived: {
+        select: {
+          id: true,
+          rating: true,
+          comment: true,
+          isVerifiedTuition: true,
+          createdAt: true,
+          student: {
+            select: {
+              id: true,
+              name: true,
+              profilePic: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+    },
     orderBy: [
       { tutorProfile: { isTutorOfTheMonth: "desc" } },
       { tutorProfile: { isPriorityListed: "desc" } },
@@ -705,6 +724,124 @@ const getAllPublicTutors = async (query?: { search?: string; subject?: string; l
   });
 
   return tutors.map(t => formatUserWithTutorProfile(t));
+};
+
+const getLeaderboardTutors = async (query?: { category?: string; limit?: string }) => {
+  const where: any = {
+    role: "tutor",
+    status: "active",
+    deletedAt: null,
+  };
+
+  if (query?.category && query.category !== "All Categories" && query.category !== "All") {
+    where.tutorProfile = {
+      ...where.tutorProfile,
+      subjects: { has: query.category },
+    };
+  }
+
+  const tutors = await prisma.user.findMany({
+    where,
+    select: {
+      ...userSelectFields,
+      reviewsReceived: {
+        select: {
+          id: true,
+          rating: true,
+          comment: true,
+          isVerifiedTuition: true,
+          createdAt: true,
+          student: {
+            select: {
+              id: true,
+              name: true,
+              profilePic: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+      applications: {
+        select: {
+          id: true,
+          status: true,
+          salaryBid: true,
+          createdAt: true,
+        },
+      },
+    },
+  });
+
+  // Calculate dynamic performance scores for each tutor
+  const rankedTutors = tutors.map((tutor) => {
+    const formatted = formatUserWithTutorProfile(tutor);
+    const reviews = tutor.reviewsReceived || [];
+    const totalReviews = reviews.length;
+    const avgRating =
+      totalReviews > 0
+        ? Number((reviews.reduce((acc, r) => acc + (r.rating || 5), 0) / totalReviews).toFixed(1))
+        : 5.0;
+
+    const acceptedApplications = tutor.applications?.filter((a) => a.status === "Hired") || [];
+    const totalHired = acceptedApplications.length;
+
+    const isVerified = tutor.isVerified || tutor.tutorProfile?.verificationStatus === "Approved";
+    const isTutorOfTheMonth = !!tutor.tutorProfile?.isTutorOfTheMonth;
+    const isPriorityListed = !!tutor.tutorProfile?.isPriorityListed;
+
+    // Performance Score Formula (0 to 100)
+    // 1. Star Rating: Up to 40 pts
+    let score = (avgRating / 5) * 40;
+    // 2. Reviews Count: Up to 20 pts (4 pts per review, max 20)
+    score += Math.min(totalReviews * 4, 20);
+    // 3. Successful Placements/Hires: Up to 15 pts (5 pts per accepted application)
+    score += Math.min(totalHired * 5, 15);
+    // 4. Verification & Recognition: Up to 20 pts
+    if (isVerified) score += 10;
+    if (isTutorOfTheMonth) score += 10;
+    if (isPriorityListed) score += 5;
+    // 5. Activity/Reward Points: Up to 5 pts
+    score += Math.min((tutor.rewardPoints || 0) / 20, 5);
+
+    return {
+      ...formatted,
+      rating: avgRating,
+      reviewsCount: totalReviews,
+      reviewsReceived: reviews,
+      totalHired,
+      performanceScore: Number(score.toFixed(1)),
+      isVerified,
+      isTutorOfTheMonth,
+      isPriorityListed,
+      attendanceRate: 100,
+      responseRateTime: "under 1 hour",
+    };
+  });
+
+  // Dynamic ranking: Tutor of Month first, then higher performance score, then higher rating, then more reviews
+  rankedTutors.sort((a, b) => {
+    if (b.isTutorOfTheMonth !== a.isTutorOfTheMonth) {
+      return (b.isTutorOfTheMonth ? 1 : 0) - (a.isTutorOfTheMonth ? 1 : 0);
+    }
+    if (b.performanceScore !== a.performanceScore) {
+      return b.performanceScore - a.performanceScore;
+    }
+    if (b.rating !== a.rating) {
+      return b.rating - a.rating;
+    }
+    return b.reviewsCount - a.reviewsCount;
+  });
+
+  const withRanks = rankedTutors.map((tutor, idx) => ({
+    ...tutor,
+    rank: idx + 1,
+  }));
+
+  if (query?.limit && Number(query.limit) > 0) {
+    return withRanks.slice(0, Number(query.limit));
+  }
+
+  return withRanks;
 };
 
 const getPublicTutorById = async (id: string) => {
@@ -718,7 +855,26 @@ const getPublicTutorById = async (id: string) => {
       status: "active",
       deletedAt: null,
     },
-    select: userSelectFields,
+    select: {
+      ...userSelectFields,
+      reviewsReceived: {
+        select: {
+          id: true,
+          rating: true,
+          comment: true,
+          isVerifiedTuition: true,
+          createdAt: true,
+          student: {
+            select: {
+              id: true,
+              name: true,
+              profilePic: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+    },
   });
 
   if (!tutor) {
@@ -738,6 +894,7 @@ export const UserService = {
   getAllUsers,
   getUserById,
   getAllPublicTutors,
+  getLeaderboardTutors,
   getPublicTutorById,
   updateUserStatus,
   deleteUser,

@@ -38,8 +38,22 @@ const getMyTransactions = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getInvoiceDetails = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const { trxId } = req.params;
+  const result = await PaymentService.getInvoiceDetails(user.id, user.role, trxId);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Invoice details retrieved successfully",
+    data: result,
+  });
+});
+
 export const PaymentController = {
   getAllTransactions,
   processPayout,
   getMyTransactions,
+  getInvoiceDetails,
 };

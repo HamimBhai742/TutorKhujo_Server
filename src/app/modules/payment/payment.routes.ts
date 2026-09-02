@@ -6,6 +6,8 @@ const router = Router();
 
 router.get("/my-transactions", auth("tutor", "student", "admin"), PaymentController.getMyTransactions);
 
+router.get("/invoice/:trxId", auth("tutor", "student", "admin"), PaymentController.getInvoiceDetails);
+
 router.get("/", auth("admin"), PaymentController.getAllTransactions);
 
 router.patch("/:id/payout", auth("admin"), PaymentController.processPayout);

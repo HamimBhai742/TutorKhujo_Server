@@ -480,6 +480,7 @@ const getAdminStats = async () => {
     hiredTuitions,
     totalApplications,
     pendingApplications,
+    totalRevenueAgg,
   ] = await Promise.all([
     prisma.user.count({ where: { deletedAt: null } }),
     prisma.user.count({ where: { role: "tutor", deletedAt: null } }),
@@ -490,7 +491,15 @@ const getAdminStats = async () => {
     prisma.tuitionPost.count({ where: { status: "Closed" } }),
     prisma.tuitionApplication.count(),
     prisma.tuitionApplication.count({ where: { status: "Pending" } }),
+    prisma.transaction
+      .aggregate({
+        _sum: { amount: true },
+        where: { status: "Success" },
+      })
+      .catch(() => ({ _sum: { amount: 0 } })),
   ]);
+
+  const totalRevenue = totalRevenueAgg?._sum?.amount || 0;
 
   return {
     totalUsers,
@@ -502,6 +511,7 @@ const getAdminStats = async () => {
     hiredTuitions,
     totalApplications,
     pendingApplications,
+    totalRevenue,
   };
 };
 

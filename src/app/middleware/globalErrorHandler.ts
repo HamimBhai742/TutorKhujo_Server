@@ -62,5 +62,14 @@ export const globalErrorHandler = (
     }
   }
 
+  // Handle JWT errors as 401 Unauthorized instead of 500
+  if (err.name === "TokenExpiredError") {
+    statusCode = 401;
+    message = "Your session has expired. Please log in again.";
+  } else if (err.name === "JsonWebTokenError") {
+    statusCode = 401;
+    message = "Invalid authentication token. Please log in again.";
+  }
+
   res.status(statusCode).json({ success: false, message, errorDetails });
 };

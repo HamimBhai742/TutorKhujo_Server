@@ -43,10 +43,14 @@ You are "TutorKhujo AI" (টউটর খুঁজুন এআই), the intelli
    - **Current Live Stats**: Over ${totalTutors}+ registered tutors & ${activePosts}+ active tuition postings available right now!
 
 ### Response Style & Guidelines:
-- **Tone**: Warm, welcoming, respectful, and encouraging.
+- **Tone**: Warm, welcoming, respectful, and highly professional.
 - **Language**: If the user writes in Bangla, reply in natural Bangla (বাংলা). If English, reply in clear English. If Banglish, reply in friendly Bangla or English based on context.
-- **Formatting**: Use neat markdown formatting (bold headers, bullet points, emoji accents) for effortless readability.
-- **Conciseness**: Give direct answers without unnecessary fluff, followed by a clear next step if relevant.
+- **Formatting**:
+  - Always format responses cleanly with bold section titles, short paragraphs, and clear bullet points.
+  - Prefer clean bullet lists or step-by-step numbers over wide tables so it looks sleek on mobile and chat screens.
+  - Never output raw HTML tags like br or p tags.
+  - Use tasteful emojis (🎓, 📌, 💡, 🚀) to structure points professionally.
+- **Conciseness**: Give direct, helpful answers without unnecessary filler, followed by a clear next step.
 - **Safety**: Do not provide misleading or false information not related to TutorKhujo.
 `;
 
@@ -87,7 +91,7 @@ You are "TutorKhujo AI" (টউটর খুঁজুন এআই), the intelli
     process.env.AI_API_KEY ||
     process.env.AGENTROUTER_API_KEY;
 
-  const model =
+  const rawModel =
     process.env.TABIAI_MODEL ||
     process.env.tabi_MODEL ||
     process.env.tAbi_MODEL ||
@@ -95,7 +99,9 @@ You are "TutorKhujo AI" (টউটর খুঁজুন এআই), the intelli
     process.env.NEWAPI_MODEL ||
     process.env.AI_MODEL ||
     process.env.AGENTROUTER_MODEL ||
-    "gpt-4o-mini";
+    "claude-opus-4-8";
+
+  const model = rawModel.trim();
 
   if (!apiKey) {
     throw new Error(
@@ -103,33 +109,43 @@ You are "TutorKhujo AI" (টউটর খুঁজুন এআই), the intelli
     );
   }
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.6,
-      max_tokens: 800,
-    }),
-  });
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.6,
+        max_tokens: 800,
+      }),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`AI Gateway Error (${response.status}):`, errorText);
-    throw new Error(`AI Gateway responded with error ${response.status}: ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`[Chatbot] AI Gateway Error (${response.status}):`, errorText || "Access restricted (e.g. Cloudflare or model limitation)");
+      return {
+        reply: "আমি বর্তমানে সাময়িকভাবে সংযোগ করতে পারছি না। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন অথবা এডমিন সাপোর্টে যোগাযোগ করুন।",
+      };
+    }
+
+    const data = (await response.json()) as any;
+    const reply =
+      data?.choices?.[0]?.message?.content ||
+      data?.choices?.[0]?.delta?.content ||
+      "I'm sorry, I couldn't generate a response. Please try again.";
+
+    return { reply };
+  } catch (error: any) {
+    console.error("[Chatbot] Network or parsing error:", error?.message || error);
+    return {
+      reply: "দুঃখিত, সংযোগে সমস্যা হয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।",
+    };
   }
-
-  const data = (await response.json()) as any;
-  const reply =
-    data?.choices?.[0]?.message?.content ||
-    data?.choices?.[0]?.delta?.content ||
-    "I'm sorry, I couldn't generate a response. Please try again.";
-
-  return { reply };
 };
 
 export const ChatbotService = {

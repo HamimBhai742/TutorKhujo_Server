@@ -1,0 +1,59 @@
+# Nginx Reverse Proxy & Load Balancer Configuration for TutorKhujo Server
+# Usage: Copy to your Nginx sites-available / conf.d directory and reload nginx.
+
+upstream tutorkhujo_backend {
+    # Load balancing method: least_conn (or round-robin by default)
+    least_conn;
+
+    # Backend Node.js process instances
+    server 127.0.0.1:5026 max_fails=3 fail_timeout=10s;
+    # If running multiple instances on separate ports (e.g. 5027, 5028):
+    # server 127.0.0.1:5027 max_fails=3 fail_timeout=10s;
+    # server 127.0.0.1:5028 max_fails=3 fail_timeout=10s;
+
+    keepalive 64; # Keep-alive TCP connections pool
+}
+
+server {
+    listen 80;
+    server_name api.tutorkhujo.com;
+
+    # Gzip Compression for lower bandwidth & faster response
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+    gzip_min_length 1000;
+
+    # API Proxy
+    location / {
+        proxy_pass http://tutorkhujo_backend;
+        proxy_http_version 1.1;
+
+        # Standard Proxy Headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Keep-alive optimization
+        proxy_set_header Connection "";
+
+        # Timeouts for heavy load
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # WebSocket / Socket.io Proxy
+    location /socket.io/ {
+        proxy_pass http://tutorkhujo_backend;
+        proxy_http_version 1.1;
+
+        # Upgrade headers for WebSockets
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host $host;
+
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}

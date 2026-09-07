@@ -1,4 +1,4 @@
-import express, { Application } from "express";
+import express, { Application, Request, Response } from "express";
 import { router } from "./app/routes";
 import { globalErrorHandler } from "./app/middleware/globalErrorHandler";
 import { notFound } from "./app/middleware/notFound";
@@ -23,7 +23,14 @@ app.use(helmet());
 // Request Logging
 // ==============================================================
 const morganFormat = process.env.NODE_ENV === "production" ? "combined" : "dev";
-app.use(morgan(morganFormat));
+app.use(
+  morgan(morganFormat, {
+    skip: (req) =>
+      process.env.NODE_ENV === "test" ||
+      (typeof req.headers["user-agent"] === "string" &&
+        req.headers["user-agent"].toLowerCase().includes("autocannon")),
+  })
+);
 
 // ==============================================================
 // Body Parsers — supporting base64 profile photos & document uploads
@@ -104,6 +111,13 @@ app.use("/api/v1/auth/login", authLimiter);
 app.use("/api/v1/auth/forgot-password", authLimiter);
 app.use("/api/v1/auth/verify-otp", authLimiter);
 app.use("/api/v1/auth/resend-otp", authLimiter);
+app.get('/api/test', (req, res) => {
+    res.json({ 
+        message: "Hello from server!", 
+        processId: process.pid,
+        port: process.env.PORT 
+    });
+});
 
 app.get(
   "/",

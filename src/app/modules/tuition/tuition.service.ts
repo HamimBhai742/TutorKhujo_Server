@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma";
 import { NotificationService } from "../notification/notification.service";
 import { sendEmail } from "../../utils/sendEmail";
 import { getIO } from "../../lib/socket";
+import { isRedisAvailable, redisClient } from "../../lib/redis";
 import {
   ICreateApplication,
   ICreateTuitionPost,
@@ -12,6 +13,29 @@ import {
   TApplicationStatus,
   TPostStatus,
 } from "./tuition.interface";
+
+const CACHE_TTL_SECONDS = 30;
+
+// In-Memory Fallback Cache when Redis is offline
+const inMemoryCache = new Map<string, { data: any; expiry: number }>();
+// In-Flight Promise Coalescing Map (Singleflight pattern to prevent Cache Stampede)
+const inFlightPromises = new Map<string, Promise<any>>();
+
+const clearTuitionCache = async () => {
+  inMemoryCache.clear();
+  inFlightPromises.clear();
+  if (isRedisAvailable && redisClient) {
+    try {
+      const keys = await redisClient.keys("cache:tuitions:*");
+      if (keys && keys.length > 0) {
+        await redisClient.del(keys);
+      }
+    } catch (err) {
+      console.warn("[Redis Cache] Failed to clear tuition cache:", err);
+    }
+  }
+};
+
 
 const isInstitutionOrQualificationMatch = (
   reqQual: string,
@@ -199,6 +223,9 @@ const createTuitionPost = async (
   // Notify matching tutors in background
   NotificationService.notifyMatchingTutors(result);
 
+  // Invalidate public query cache
+  clearTuitionCache();
+
   return result;
 };
 
@@ -225,111 +252,162 @@ const getMyTuitionPosts = async (studentId: string) => {
 };
 
 const getAllTuitionPosts = async (filters: ITuitionQueryFilters) => {
-  const {
-    searchTerm,
-    classLevel,
-    subject,
-    mode,
-    location,
-    status,
-    minBudget,
-    maxBudget,
-    page = 1,
-    limit = 10,
-    sortBy = "createdAt",
-    sortOrder = "desc",
-  } = filters;
+  const cacheKey = `cache:tuitions:${JSON.stringify(filters)}`;
 
-  const andConditions: Prisma.TuitionPostWhereInput[] = [];
-
-  // Default to Active posts if not specified by public query
-  if (status) {
-    andConditions.push({ status: status as any });
+  if (isRedisAvailable && redisClient) {
+    try {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (err) {
+      console.warn("[Redis Cache] Read error:", err);
+    }
+  } else {
+    const memCached = inMemoryCache.get(cacheKey);
+    if (memCached && memCached.expiry > Date.now()) {
+      return memCached.data;
+    }
   }
 
-  if (searchTerm) {
-    andConditions.push({
-      OR: [
-        { classLevel: { contains: searchTerm, mode: "insensitive" } },
-        { location: { contains: searchTerm, mode: "insensitive" } },
-        { title: { contains: searchTerm, mode: "insensitive" } },
-        { subjects: { has: searchTerm } },
-      ],
-    });
+  // Singleflight / Coalescing: Attach concurrent requests to the same in-flight DB query Promise
+  if (inFlightPromises.has(cacheKey)) {
+    return inFlightPromises.get(cacheKey)!;
   }
 
-  if (classLevel && classLevel !== "All") {
-    andConditions.push({
-      classLevel: { contains: classLevel, mode: "insensitive" },
-    });
-  }
+  const fetchPromise = (async () => {
+    try {
+      const {
+        searchTerm,
+        classLevel,
+        subject,
+        mode,
+        location,
+        status,
+        minBudget,
+        maxBudget,
+        page = 1,
+        limit = 10,
+        sortBy = "createdAt",
+        sortOrder = "desc",
+      } = filters;
 
-  if (location && location !== "All Dhaka" && location !== "All") {
-    andConditions.push({
-      location: { contains: location, mode: "insensitive" },
-    });
-  }
+      const andConditions: Prisma.TuitionPostWhereInput[] = [];
 
-  if (mode && mode !== "All") {
-    andConditions.push({
-      mode: mode as any,
-    });
-  }
+      // Default to Active posts if not specified by public query
+      if (status) {
+        andConditions.push({ status: status as any });
+      }
 
-  if (subject && subject !== "All") {
-    andConditions.push({
-      subjects: { has: subject },
-    });
-  }
+      if (searchTerm) {
+        andConditions.push({
+          OR: [
+            { classLevel: { contains: searchTerm, mode: "insensitive" } },
+            { location: { contains: searchTerm, mode: "insensitive" } },
+            { title: { contains: searchTerm, mode: "insensitive" } },
+            { subjects: { has: searchTerm } },
+          ],
+        });
+      }
 
-  if (minBudget !== undefined || maxBudget !== undefined) {
-    const budgetCondition: Prisma.IntFilter = {};
-    if (minBudget !== undefined) budgetCondition.gte = Number(minBudget);
-    if (maxBudget !== undefined) budgetCondition.lte = Number(maxBudget);
-    andConditions.push({ budget: budgetCondition });
-  }
+      if (classLevel && classLevel !== "All") {
+        andConditions.push({
+          classLevel: { contains: classLevel, mode: "insensitive" },
+        });
+      }
 
-  const whereCondition: Prisma.TuitionPostWhereInput =
-    andConditions.length > 0 ? { AND: andConditions } : {};
+      if (location && location !== "All Dhaka" && location !== "All") {
+        andConditions.push({
+          location: { contains: location, mode: "insensitive" },
+        });
+      }
 
-  const skip = (Number(page) - 1) * Number(limit);
-  const take = Number(limit);
+      if (mode && mode !== "All") {
+        andConditions.push({
+          mode: mode as any,
+        });
+      }
 
-  const [result, total] = await Promise.all([
-    prisma.tuitionPost.findMany({
-      where: whereCondition,
-      skip,
-      take,
-      orderBy: {
-        [sortBy]: sortOrder,
-      },
-      include: {
-        student: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+      if (subject && subject !== "All") {
+        andConditions.push({
+          subjects: { has: subject },
+        });
+      }
+
+      if (minBudget !== undefined || maxBudget !== undefined) {
+        const budgetCondition: Prisma.IntFilter = {};
+        if (minBudget !== undefined) budgetCondition.gte = Number(minBudget);
+        if (maxBudget !== undefined) budgetCondition.lte = Number(maxBudget);
+        andConditions.push({ budget: budgetCondition });
+      }
+
+      const whereCondition: Prisma.TuitionPostWhereInput =
+        andConditions.length > 0 ? { AND: andConditions } : {};
+
+      const skip = (Number(page) - 1) * Number(limit);
+      const take = Number(limit);
+
+      const [result, total] = await Promise.all([
+        prisma.tuitionPost.findMany({
+          where: whereCondition,
+          skip,
+          take,
+          orderBy: {
+            [sortBy]: sortOrder,
           },
-        },
-        _count: {
-          select: { applications: true }, // Avoids N+1 query for applicant count
-        },
-      },
-    }),
-    prisma.tuitionPost.count({
-      where: whereCondition,
-    }),
-  ]);
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            _count: {
+              select: { applications: true }, // Avoids N+1 query for applicant count
+            },
+          },
+        }),
+        prisma.tuitionPost.count({
+          where: whereCondition,
+        }),
+      ]);
 
-  return {
-    metaData: {
-      page: Number(page),
-      limit: Number(limit),
-      total,
-      totalPages: Math.ceil(total / Number(limit)),
-    },
-    data: result,
-  };
+      const responseData = {
+        metaData: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+        data: result,
+      };
+
+      if (isRedisAvailable && redisClient) {
+        try {
+          await redisClient.setEx(
+            cacheKey,
+            CACHE_TTL_SECONDS,
+            JSON.stringify(responseData)
+          );
+        } catch (err) {
+          console.warn("[Redis Cache] Write error:", err);
+        }
+      } else {
+        inMemoryCache.set(cacheKey, {
+          data: responseData,
+          expiry: Date.now() + CACHE_TTL_SECONDS * 1000,
+        });
+      }
+
+      return responseData;
+    } finally {
+      inFlightPromises.delete(cacheKey);
+    }
+  })();
+
+  inFlightPromises.set(cacheKey, fetchPromise);
+  return fetchPromise;
 };
 
 const getTuitionPostById = async (id: string) => {
@@ -399,6 +477,8 @@ const updateTuitionPost = async (
     },
   });
 
+  clearTuitionCache();
+
   return result;
 };
 
@@ -425,6 +505,8 @@ const updatePostStatus = async (
     data: { status },
   });
 
+  clearTuitionCache();
+
   return result;
 };
 
@@ -448,6 +530,8 @@ const deleteTuitionPost = async (
   await prisma.tuitionPost.delete({
     where: { id },
   });
+
+  clearTuitionCache();
 
   return { message: "Tuition post deleted successfully" };
 };

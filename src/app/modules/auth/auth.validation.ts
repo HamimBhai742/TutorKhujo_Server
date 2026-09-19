@@ -11,6 +11,7 @@ const registerValidationSchema = z.object({
       .min(6, "Password must be at least 6 characters"),
     mobile: z.string({ required_error: "Mobile number is required" }),
     role: z.enum(["student", "tutor"], { required_error: "Role is required" }),
+    referralCode: z.string().optional(),
   }),
 });
 

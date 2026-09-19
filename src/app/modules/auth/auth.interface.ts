@@ -4,6 +4,7 @@ export interface IRegisterUser {
   password: string;
   mobile: string;
   role: "student" | "tutor";
+  referralCode?: string;
 }
 
 export interface ILoginUser {

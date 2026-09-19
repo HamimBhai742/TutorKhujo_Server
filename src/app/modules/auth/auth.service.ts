@@ -25,6 +25,20 @@ const registerUser = async (payload: IRegisterUser) => {
     },
   });
 
+  let referredById: string | undefined = undefined;
+  if (payload.referralCode && payload.referralCode.trim()) {
+    const cleanRefCode = payload.referralCode.trim().toUpperCase();
+    const referrer = await prisma.user.findUnique({
+      where: { referralCode: cleanRefCode },
+      select: { id: true, email: true },
+    });
+    if (referrer && referrer.email.toLowerCase() !== payload.email.toLowerCase()) {
+      referredById = referrer.id;
+    }
+  }
+
+  const userReferralCode = `TK-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
   if (isUserExist) {
     if (isUserExist.isVerified) {
       throw new AppError("User with this email already exists", 400);
@@ -45,7 +59,11 @@ const registerUser = async (payload: IRegisterUser) => {
         email: payload.email,
       },
       data: {
-        ...payload,
+        name: payload.name,
+        email: payload.email,
+        mobile: payload.mobile,
+        role: payload.role,
+        ...(referredById ? { referredById } : {}),
         password: hashedPassword,
         otpCode,
         otpExpires,
@@ -81,7 +99,12 @@ const registerUser = async (payload: IRegisterUser) => {
 
   const newUser = await prisma.user.create({
     data: {
-      ...payload,
+      name: payload.name,
+      email: payload.email,
+      mobile: payload.mobile,
+      role: payload.role,
+      referralCode: userReferralCode,
+      ...(referredById ? { referredById } : {}),
       password: hashedPassword,
       isVerified: false,
       otpCode,
@@ -205,6 +228,43 @@ const verifyOtp = async (email: string, otpCode: string) => {
       otpExpires: null,
     },
   });
+
+  // Award referral rewards if user was referred by someone
+  if (user.referredById) {
+    try {
+      // 1. Award 50 points to the referrer
+      await prisma.user.update({
+        where: { id: user.referredById },
+        data: { rewardPoints: { increment: 50 } },
+      });
+      await prisma.pointTransaction.create({
+        data: {
+          userId: user.referredById,
+          points: 50,
+          type: "REFERRAL_BONUS",
+          method: "System",
+          description: `Referral reward for inviting ${user.name || user.email}`,
+        },
+      });
+
+      // 2. Award 25 welcome points to the newly registered user
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { rewardPoints: { increment: 25 } },
+      });
+      await prisma.pointTransaction.create({
+        data: {
+          userId: user.id,
+          points: 25,
+          type: "WELCOME_BONUS",
+          method: "System",
+          description: "Welcome bonus for registering with a referral code",
+        },
+      });
+    } catch (refErr) {
+      console.error("Failed to credit referral bonus:", refErr);
+    }
+  }
 
   const jwtPayload = {
     id: updatedUser.id,
@@ -440,7 +500,11 @@ const googleLogin = async (payload: { idToken: string; role?: "student" | "tutor
   try {
     ticket = await client.verifyIdToken({
       idToken: payload.idToken,
-      audience: config.google_client_id,
+      audience: [
+        config.google_client_id,
+        "417217799647-m6r8ppf94s41bu2qqdj2ucsvp2pt5g5n.apps.googleusercontent.com",
+        "417217799647-aaooicqo5ujp5jjvvh82h9rmnc6s9e42.apps.googleusercontent.com",
+      ].filter(Boolean) as string[],
     });
   } catch (error: any) {
     throw new AppError("Invalid Google ID token", 401);

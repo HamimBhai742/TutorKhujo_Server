@@ -65,6 +65,9 @@ router.patch(
   UserController.onboardTutor
 );
 
+// Self account deletion (Google Play Store compliance requirement)
+router.delete("/me", auth("student", "tutor", "admin"), UserController.deleteMe);
+
 router.get("/admin-stats", auth("admin"), UserController.getAdminStats);
 
 router.get("/verifications", auth("admin"), UserController.getPendingVerifications);

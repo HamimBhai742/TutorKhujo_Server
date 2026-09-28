@@ -676,6 +676,13 @@ const deleteUser = async (userId: string) => {
   return { message: "User deleted successfully" };
 };
 
+const deleteMe = async (userId: string) => {
+  // Revoke all active refresh tokens and device push tokens immediately
+  await prisma.refreshToken.deleteMany({ where: { userId } }).catch(() => {});
+  await prisma.deviceToken.deleteMany({ where: { userId } }).catch(() => {});
+  return deleteUser(userId);
+};
+
 const getAllPublicTutors = async (query?: { search?: string; subject?: string; location?: string }) => {
   const where: any = {
     role: "tutor",
@@ -908,4 +915,5 @@ export const UserService = {
   getPublicTutorById,
   updateUserStatus,
   deleteUser,
+  deleteMe,
 };

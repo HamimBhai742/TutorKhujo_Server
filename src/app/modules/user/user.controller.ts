@@ -93,6 +93,18 @@ const deleteUser = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const deleteMe = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const result = await UserService.deleteMe(user.id);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Your account has been deleted successfully",
+    data: result,
+  });
+});
+
 const onboardTutor = catchAsync(async (req: Request, res: Response) => {
   const user = req.user!;
   const result = await UserService.onboardTutor(user.id, req.body);
@@ -248,4 +260,5 @@ export const UserController = {
   getPublicTutorById,
   updateUserStatus,
   deleteUser,
+  deleteMe,
 };

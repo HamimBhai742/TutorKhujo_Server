@@ -5,12 +5,36 @@ import { NotificationService } from "../notification/notification.service";
 
 const createConversation = async (
   requesterId: string,
-  requesterRole: "student" | "tutor",
+  requesterRole: string,
   otherUserId: string
 ) => {
+  if (requesterId === otherUserId) {
+    throw new AppError("Cannot start a conversation with yourself", 400);
+  }
+
+  const otherUser = await prisma.user.findUnique({
+    where: { id: otherUserId },
+    select: { id: true, role: true },
+  });
+
+  if (!otherUser) {
+    throw new AppError("Target user not found", 404);
+  }
+
   // Determine studentId / tutorId based on who is making the request
-  const studentId = requesterRole === "student" ? requesterId : otherUserId;
-  const tutorId = requesterRole === "tutor" ? requesterId : otherUserId;
+  let studentId: string;
+  let tutorId: string;
+
+  if (requesterRole === "tutor") {
+    tutorId = requesterId;
+    studentId = otherUserId;
+  } else if (otherUser.role === "tutor") {
+    studentId = requesterId;
+    tutorId = otherUserId;
+  } else {
+    studentId = requesterId;
+    tutorId = otherUserId;
+  }
 
   let conversation = await prisma.conversation.findFirst({
     where: {
@@ -40,7 +64,7 @@ const createConversation = async (
 
   return {
     ...conversation,
-    recipientId: requesterRole === "student" ? conversation.tutorId : conversation.studentId,
+    recipientId: requesterId === conversation.studentId ? conversation.tutorId : conversation.studentId,
   };
 };
 

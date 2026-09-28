@@ -12,7 +12,18 @@ const PACKAGE_RATES: Record<number, number> = {
 };
 
 const buyPackage = async (userId: string, payload: IBuyPackagePayload) => {
-  const points = PACKAGE_RATES[payload.packagePrice];
+  // Support both packagePrice and legacy packageId
+  let resolvedPrice = Number(payload.packagePrice);
+  if (!resolvedPrice && (payload as any).packageId) {
+    const pkgId = String((payload as any).packageId).toLowerCase();
+    if (pkgId.includes('100')) resolvedPrice = 99;
+    else if (pkgId.includes('200')) resolvedPrice = 199;
+    else if (pkgId.includes('300')) resolvedPrice = 299;
+    else if (pkgId.includes('400')) resolvedPrice = 399;
+    else if (pkgId.includes('500')) resolvedPrice = 499;
+  }
+
+  const points = PACKAGE_RATES[resolvedPrice];
   if (!points) {
     throw new AppError("Invalid point package selected. Valid packages are ৳99, ৳199, ৳299, ৳399, ৳499", 400);
   }
